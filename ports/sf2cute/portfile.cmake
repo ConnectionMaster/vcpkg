@@ -1,5 +1,3 @@
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO gocha/sf2cute
@@ -26,11 +24,9 @@ vcpkg_configure_cmake(
 
 vcpkg_install_cmake()
 vcpkg_copy_pdbs()
+vcpkg_fixup_cmake_targets()
 
 file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-
-# move the .cmake files from the given directory to the expected directory by vcpkg
-vcpkg_fixup_cmake_targets(CONFIG_PATH share/sf2cute)
 
 # Handle copyright
 file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/sf2cute RENAME copyright)
@@ -38,6 +34,3 @@ file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/sf
 if(BUILD_EXAMPLE)
   vcpkg_copy_tool_dependencies(${CURRENT_PACKAGES_DIR}/tools/sf2cute)
 endif()
-
-# Post-build test for cmake libraries
-vcpkg_test_cmake(PACKAGE_NAME sf2cute)

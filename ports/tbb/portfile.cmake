@@ -1,103 +1,38 @@
-include(vcpkg_common_functions)
-
-if(NOT VCPKG_CMAKE_SYSTEM_NAME OR VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-    if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-        message("tbb only supports dynamic library linkage")
-        set(VCPKG_LIBRARY_LINKAGE "dynamic")
-    endif()
-endif()
+set(VCPKG_POLICY_MISMATCHED_NUMBER_OF_BINARIES enabled)
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
-    REPO 01org/tbb
-    REF 2019_U5
-    SHA512 227b12e3864fbb922ddbc99700bf94d7d8897d62e2056bf3beb608efacf3ca785dd416b94ad65b421b6c9fc11caff688147b5fbe400c51e98678cee5dc04f274
-    HEAD_REF tbb_2019
+    REPO oneapi-src/oneTBB
+    REF v2021.5.0
+    SHA512 0e7b71022e397a6d7abb0cea106847935ae79a1e12a6976f8d038668c6eca8775ed971202c5bd518f7e517092b67af805cc5feb04b5c3a40e9fbf972cc703a46
+    HEAD_REF onetbb_2021
 )
 
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
-
-if(VCPKG_CMAKE_SYSTEM_NAME AND NOT VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-    vcpkg_configure_cmake(
-        SOURCE_PATH ${SOURCE_PATH}
-        PREFER_NINJA
-    )
-
-    vcpkg_install_cmake()
-
-    # Settings for TBBConfigInternal.cmake.in
-    set(TBB_LIB_EXT a)
-    set(TBB_LIB_PREFIX lib)
-else()
-    if (VCPKG_CRT_LINKAGE STREQUAL static)
-        set(RELEASE_CONFIGURATION Release-MT)
-        set(DEBUG_CONFIGURATION Debug-MT)
-    else()
-        set(RELEASE_CONFIGURATION Release)
-        set(DEBUG_CONFIGURATION Debug)
-    endif()
-
-    vcpkg_install_msbuild(
-        SOURCE_PATH ${SOURCE_PATH}
-        PROJECT_SUBPATH build/vs2013/makefile.sln
-        RELEASE_CONFIGURATION ${RELEASE_CONFIGURATION}
-        DEBUG_CONFIGURATION ${DEBUG_CONFIGURATION}
-    )
-    # Settings for TBBConfigInternal.cmake.in
-    set(TBB_LIB_EXT lib)
-    set(TBB_LIB_PREFIX)
-endif()
-
-file(COPY
-  ${SOURCE_PATH}/include/tbb
-  ${SOURCE_PATH}/include/serial
-  DESTINATION ${CURRENT_PACKAGES_DIR}/include)
-
-# Settings for TBBConfigInternal.cmake.in
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    set(TBB_DEFAULT_COMPONENTS tbb tbbmalloc)
-else()
-    set(TBB_DEFAULT_COMPONENTS tbb tbbmalloc tbbmalloc_proxy)
-endif()
-
-file(READ "${SOURCE_PATH}/include/tbb/tbb_stddef.h" _tbb_stddef)
-string(REGEX REPLACE ".*#define TBB_VERSION_MAJOR ([0-9]+).*" "\\1" _tbb_ver_major "${_tbb_stddef}")
-string(REGEX REPLACE ".*#define TBB_VERSION_MINOR ([0-9]+).*" "\\1" _tbb_ver_minor "${_tbb_stddef}")
-string(REGEX REPLACE ".*#define TBB_INTERFACE_VERSION ([0-9]+).*" "\\1" TBB_INTERFACE_VERSION "${_tbb_stddef}")
-set(TBB_VERSION "${_tbb_ver_major}.${_tbb_ver_minor}")
-set(TBB_RELEASE_DIR "\${_tbb_root}/lib")
-set(TBB_DEBUG_DIR "\${_tbb_root}/debug/lib")
-
-configure_file(
-    ${SOURCE_PATH}/cmake/templates/TBBConfigInternal.cmake.in
-    ${CURRENT_PACKAGES_DIR}/share/tbb/TBBConfig.cmake
-    @ONLY
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DTBB_TEST=OFF
+        -DTBB_STRICT=OFF
 )
-file(READ ${CURRENT_PACKAGES_DIR}/share/tbb/TBBConfig.cmake _contents)
-string(REPLACE
-    "get_filename_component(_tbb_root \"\${_tbb_root}\" PATH)"
-    "get_filename_component(_tbb_root \"\${_tbb_root}\" PATH)\nget_filename_component(_tbb_root \"\${_tbb_root}\" PATH)"
-    _contents
-    "${_contents}"
-)
-string(REPLACE
-    "set(_tbb_release_lib \"/\${_tbb_component}.lib\")"
-    "set(_tbb_release_lib \"\${_tbb_root}/lib/\${_tbb_component}.lib\")"
-    _contents
-    "${_contents}"
-)
-string(REPLACE
-    "set(_tbb_debug_lib \"/\${_tbb_component}_debug.lib\")"
-    "set(_tbb_debug_lib \"\${_tbb_root}/debug/lib/\${_tbb_component}_debug.lib\")"
-    _contents
-    "${_contents}"
-)
-string(REPLACE "SHARED IMPORTED)" "UNKNOWN IMPORTED)" _contents "${_contents}")
-file(WRITE ${CURRENT_PACKAGES_DIR}/share/tbb/TBBConfig.cmake "${_contents}")
 
-# Handle copyright
-file(COPY ${SOURCE_PATH}/LICENSE ${CMAKE_CURRENT_LIST_DIR}/usage DESTINATION ${CURRENT_PACKAGES_DIR}/share/tbb)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/tbb/LICENSE ${CURRENT_PACKAGES_DIR}/share/tbb/copyright)
+vcpkg_cmake_install()
+vcpkg_cmake_config_fixup(CONFIG_PATH "lib/cmake/TBB")
+vcpkg_fixup_pkgconfig()
+vcpkg_copy_pdbs()
 
-vcpkg_test_cmake(PACKAGE_NAME TBB)
-#
+file(REMOVE_RECURSE
+    "${CURRENT_PACKAGES_DIR}/share/doc"
+    "${CURRENT_PACKAGES_DIR}/debug/include"
+    "${CURRENT_PACKAGES_DIR}/debug/share"
+    # These are duplicate libraries provided on Windows -- users should use the tbb12 libraries instead
+    "${CURRENT_PACKAGES_DIR}/lib/tbb.lib"
+    "${CURRENT_PACKAGES_DIR}/debug/lib/tbb_debug.lib"
+)
+
+file(READ "${CURRENT_PACKAGES_DIR}/share/tbb/TBBConfig.cmake" _contents)
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/tbb/TBBConfig.cmake" "
+include(CMakeFindDependencyMacro)
+find_dependency(Threads)
+${_contents}")
+
+file(INSTALL "${SOURCE_PATH}/LICENSE.txt" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

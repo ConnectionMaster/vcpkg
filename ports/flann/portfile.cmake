@@ -1,56 +1,42 @@
-include(vcpkg_common_functions)
+#the port uses inside the CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS, which is discouraged by vcpkg.
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
-    REPO mariusmuja/flann
-    REF  1.9.1
-    SHA512 0da78bb14111013318160dd3dee1f93eb6ed077b18439fd6496017b62a8a6070cc859cfb3e08dad4c614e48d9dc1da5f7c4a21726ee45896d360506da074a6f7
+    REPO flann-lib/flann
+    REF  1d04523268c388dabf1c0865d69e1b638c8c7d9d
+    SHA512 61e322222c2daa0b9677095e5ca231cba7c305ce754ad8e659eee350111c1e04351181c3af04e45ab6e5c9edea49c7b9ec6499bb0dbc080b87af36eb11c6ef7c
     HEAD_REF master
     PATCHES
-        export-all-symbols-of-flann-cpp.patch
-        no-write-src-dir.patch
-        flann-linux.patch
+        fix-build-error.patch
+        fix-dependency-hdf5.patch
 )
 
-vcpkg_configure_cmake(
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        hdf5    WITH_HDF5
+        cuda    BUILD_CUDA_LIB
+)
+
+vcpkg_cmake_configure(
     SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
-    OPTIONS
+    DISABLE_PARALLEL_CONFIGURE
+    OPTIONS ${FEATURE_OPTIONS}
         -DBUILD_EXAMPLES=OFF
         -DBUILD_TESTS=OFF
         -DBUILD_DOC=OFF
         -DBUILD_PYTHON_BINDINGS=OFF
         -DBUILD_MATLAB_BINDINGS=OFF
-        -DCMAKE_DEBUG_POSTFIX=-gd
-        -DHDF5_NO_FIND_PACKAGE_CONFIG_FILE=ON
+        -DUSE_OPENMP=OFF
+    OPTIONS_DEBUG 
+        -DCMAKE_DEBUG_POSTFIX=d
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
+vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/${PORT})
 
 file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
 
-if(NOT VCPKG_CMAKE_SYSTEM_NAME OR VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-    set(LIB_PREFIX "")
-    set(LIB_SUFFIX ".lib")
-else()
-    set(LIB_PREFIX "lib")
-    set(LIB_SUFFIX ".a")
-endif()
-
-if(VCPKG_LIBRARY_LINKAGE STREQUAL static)
-    file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/bin ${CURRENT_PACKAGES_DIR}/debug/bin)
-    file(REMOVE ${CURRENT_PACKAGES_DIR}/lib/${LIB_PREFIX}flann${LIB_SUFFIX} ${CURRENT_PACKAGES_DIR}/debug/lib/${LIB_PREFIX}flann-gd${LIB_SUFFIX})
-    file(REMOVE ${CURRENT_PACKAGES_DIR}/lib/${LIB_PREFIX}flann_cpp${LIB_SUFFIX} ${CURRENT_PACKAGES_DIR}/debug/lib/${LIB_PREFIX}flann_cpp-gd${LIB_SUFFIX})
-
-    file(RENAME ${CURRENT_PACKAGES_DIR}/lib/${LIB_PREFIX}flann_s${LIB_SUFFIX} ${CURRENT_PACKAGES_DIR}/lib/${LIB_PREFIX}flann${LIB_SUFFIX})
-    file(RENAME ${CURRENT_PACKAGES_DIR}/debug/lib/${LIB_PREFIX}flann_s-gd${LIB_SUFFIX} ${CURRENT_PACKAGES_DIR}/debug/lib/${LIB_PREFIX}flann-gd${LIB_SUFFIX})
-    file(RENAME ${CURRENT_PACKAGES_DIR}/lib/${LIB_PREFIX}flann_cpp_s${LIB_SUFFIX} ${CURRENT_PACKAGES_DIR}/lib/${LIB_PREFIX}flann_cpp${LIB_SUFFIX})
-    file(RENAME ${CURRENT_PACKAGES_DIR}/debug/lib/${LIB_PREFIX}flann_cpp_s-gd${LIB_SUFFIX} ${CURRENT_PACKAGES_DIR}/debug/lib/${LIB_PREFIX}flann_cpp-gd${LIB_SUFFIX})
-elseif(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    file(REMOVE ${CURRENT_PACKAGES_DIR}/lib/${LIB_PREFIX}flann_s${LIB_SUFFIX} ${CURRENT_PACKAGES_DIR}/debug/lib/${LIB_PREFIX}flann_s-gd${LIB_SUFFIX})
-    file(REMOVE ${CURRENT_PACKAGES_DIR}/lib/${LIB_PREFIX}flann_cpp_s${LIB_SUFFIX} ${CURRENT_PACKAGES_DIR}/debug/lib/${LIB_PREFIX}flann_cpp_s-gd${LIB_SUFFIX})
-endif()
-
 # Handle copyright
-file(COPY ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/flann)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/flann/COPYING ${CURRENT_PACKAGES_DIR}/share/flann/copyright)
+file(INSTALL ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/flann RENAME copyright)
+
+vcpkg_fixup_pkgconfig()

@@ -1,37 +1,24 @@
-# Common Ambient Variables:
-#   VCPKG_ROOT_DIR = <C:\path\to\current\vcpkg>
-#   TARGET_TRIPLET is the current triplet (x86-windows, etc)
-#   PORT is the current port name (zlib, etc)
-#   CURRENT_BUILDTREES_DIR = ${VCPKG_ROOT_DIR}\buildtrees\${PORT}
-#   CURRENT_PACKAGES_DIR  = ${VCPKG_ROOT_DIR}\packages\${PORT}_${TARGET_TRIPLET}
-#
+string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" HDF5_USE_STATIC_LIBRARIES)
 
-if(${VCPKG_LIBRARY_LINKAGE} MATCHES "static")
-    set(HDF5_USE_STATIC_LIBRARIES ON)
-endif()
+vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
-if (VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
-    message(STATUS "Warning: DLLs not supported yet. Building static.")
-    set(VCPKG_LIBRARY_LINKAGE static)
-endif()
-
-include(vcpkg_common_functions)
-set(SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/netcdf-cxx4-4.3.0)
-vcpkg_download_distfile(ARCHIVE
-    URLS "https://github.com/Unidata/netcdf-cxx4/archive/v4.3.0.zip"
-    FILENAME "netcdf-cxx4-4.3.0.zip"
-    SHA512 c0ae933446c5bb019ab90c097787cefe15a0161b6b768e0251e9e0b21c92ca8d42d98babcbe07b81b8db08cd1e9fba7befb853611a76debfdfba0aee4fb4b0bc
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO Unidata/netcdf-cxx4
+    REF f8882188267488ef801691e69ad072e3eb217ad8 # v4.3.1
+    SHA512 9816acf221d196e21af19d4c3d85484934916e7c018e9b2c96aab9f5660b2f08c5db9cd8254ba3fa5f0aa5f5c5ad7bd3a3aaba559e5e640c5349d44e07a20ed3
+    HEAD_REF master
+    PATCHES 
+        fix-dependecy-hdf5.patch
+        export-cmake-targets.patch
 )
-vcpkg_extract_source_archive(${ARCHIVE})
 
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}
-    PATCHES ${CMAKE_CURRENT_LIST_DIR}/install-destination.patch
-)
+#Provided by upstream https://github.com/Unidata/netcdf-cxx4/blob/master/netCDFCxxConfig.cmake.in
+file(COPY ${CMAKE_CURRENT_LIST_DIR}/netCDFCxxConfig.cmake.in DESTINATION ${SOURCE_PATH})
 
 vcpkg_configure_cmake(
     SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA # Disable this option if project cannot be built with Ninja
+    PREFER_NINJA
     OPTIONS
         -DNCXX_ENABLE_TESTS=OFF
         -DCMAKE_INSTALL_CMAKECONFIGDIR=share/netCDFCxx
@@ -41,14 +28,15 @@ vcpkg_configure_cmake(
 )
 
 vcpkg_install_cmake()
+vcpkg_fixup_cmake_targets(CONFIG_PATH lib/cmake/netCDFCxx TARGET_PATH share/netCDFCxx)
+vcpkg_copy_pdbs()
 
 file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
 file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/share)
 
+if(VCPKG_LIBRARY_LINKAGE STREQUAL static)
+    file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/bin ${CURRENT_PACKAGES_DIR}/debug/bin)
+endif()
+
 # Handle copyright
-file(COPY ${SOURCE_PATH}/COPYRIGHT DESTINATION ${CURRENT_PACKAGES_DIR}/share/netcdf-cxx4)
-file(
-    RENAME
-        ${CURRENT_PACKAGES_DIR}/share/netcdf-cxx4/COPYRIGHT
-        ${CURRENT_PACKAGES_DIR}/share/netcdf-cxx4/copyright
-)
+file(INSTALL ${SOURCE_PATH}/COPYRIGHT DESTINATION ${CURRENT_PACKAGES_DIR}/share/${PORT} RENAME copyright)

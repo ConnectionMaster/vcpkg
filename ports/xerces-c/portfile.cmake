@@ -1,19 +1,19 @@
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO apache/xerces-c
-    REF Xerces-C_3_2_2
-    SHA512 66f60fe9194376ac0ca99d13ea5bce23ada86e0261dde30686c21ceb5499e754dab8eb0a98adadd83522bda62709377715501f6dac49763e3a686f9171cc63ea
-    HEAD_REF trunk
-    PATCHES disable-tests.patch
+    REF v3.2.3
+    SHA512 aaafe2de4ea156d94e71e3631c79bd66660badf17bf2a19587a0ca34011f70bd1584a0beef909409a3ff05eecea9d37ffee6dbb267625f59217fd86705d2cd28
+    HEAD_REF master
+    PATCHES
+        disable-tests.patch
+        remove-dll-export-macro.patch
 )
 
 set(DISABLE_ICU ON)
 if("icu" IN_LIST FEATURES)
     set(DISABLE_ICU OFF)
 endif()
-if ("xmlch_wchar" IN_LIST FEATURES)
+if ("xmlch-wchar" IN_LIST FEATURES)
     set(XMLCHTYPE -Dxmlch-type=wchar_t)
 endif()
 
@@ -25,10 +25,13 @@ vcpkg_configure_cmake(
         -DDISABLE_DOC=ON
         -DDISABLE_SAMPLES=ON
         -DCMAKE_DISABLE_FIND_PACKAGE_ICU=${DISABLE_ICU}
+        -DCMAKE_DISABLE_FIND_PACKAGE_CURL=ON
         ${XMLCHTYPE}
 )
 
 vcpkg_install_cmake()
+
+vcpkg_copy_pdbs()
 
 if(EXISTS ${CURRENT_PACKAGES_DIR}/cmake)
     vcpkg_fixup_cmake_targets(CONFIG_PATH cmake TARGET_PATH share/xercesc)
@@ -38,12 +41,15 @@ endif()
 
 file(READ ${CURRENT_PACKAGES_DIR}/share/xercesc/XercesCConfigInternal.cmake _contents)
 string(REPLACE
-    "get_filename_component(_IMPORT_PREFIX \"\${_IMPORT_PREFIX}\" PATH)"
+    "get_filename_component(_IMPORT_PREFIX \"\${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"\${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"\${_IMPORT_PREFIX}\" PATH)"
     "get_filename_component(_IMPORT_PREFIX \"\${_IMPORT_PREFIX}\" PATH)\nget_filename_component(_IMPORT_PREFIX \"\${_IMPORT_PREFIX}\" PATH)"
     _contents
     "${_contents}"
 )
 file(WRITE ${CURRENT_PACKAGES_DIR}/share/xercesc/XercesCConfigInternal.cmake "${_contents}")
+
+file(READ ${CURRENT_PACKAGES_DIR}/share/xercesc/XercesCConfig.cmake _contents)
+file(WRITE ${CURRENT_PACKAGES_DIR}/share/xercesc/XercesCConfig.cmake "include(CMakeFindDependencyMacro)\nfind_dependency(Threads)\n${_contents}")
 
 configure_file(
     ${CMAKE_CURRENT_LIST_DIR}/vcpkg-cmake-wrapper.cmake
@@ -57,7 +63,16 @@ file(REMOVE_RECURSE
 )
 
 # Handle copyright
-file(COPY ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/xerces-c)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/xerces-c/LICENSE ${CURRENT_PACKAGES_DIR}/share/xerces-c/copyright)
+file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/${PORT} RENAME copyright)
 
-vcpkg_copy_pdbs()
+vcpkg_fixup_pkgconfig()
+if (VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
+    set(pc_file_release "${CURRENT_PACKAGES_DIR}/lib/pkgconfig/xerces-c.pc")
+    set(pc_file_debug "${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig/xerces-c.pc")
+    if(EXISTS "${pc_file_release}")
+        vcpkg_replace_string("${pc_file_release}" "-lxerces-c" "-lxerces-c_3")
+    endif()
+    if(EXISTS "${pc_file_debug}")
+        vcpkg_replace_string("${pc_file_debug}" "-lxerces-c" "-lxerces-c_3D")
+    endif()
+endif()

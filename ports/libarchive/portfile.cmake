@@ -1,63 +1,40 @@
-# libarchive uses winapi functions not available in WindowsStore
-if (VCPKG_CMAKE_SYSTEM_NAME STREQUAL WindowsStore)
-    message(FATAL_ERROR "Error: UWP builds are not supported.")
-endif()
-
-include(vcpkg_common_functions)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO libarchive/libarchive
-    REF v3.3.3
-    SHA512 10063764b610c0c966ba0177cac0d2cb781e297a45545cc8a587741513089af26f40769670894c86e7985b73c47e9cb985253bc3bef3a12fa83fe2a6a30acb6d
+    REF 6c3301111caa75c76e1b2acb1afb2d71341932ef      #v3.6.1
+    SHA512 2fd56ac20e4249807174a2ae29de1cbca55c8f8f247500845f56fd1fd9ebf48c17b8a25a93156df71df9526c0061415ec7d72a6b46bbaca776047e381a2321a7
     HEAD_REF master
     PATCHES
-        ${CMAKE_CURRENT_LIST_DIR}/fix-buildsystem.patch
-        ${CMAKE_CURRENT_LIST_DIR}/fix-dependencies.patch
-        ${CMAKE_CURRENT_LIST_DIR}/fix-lz4.patch
-        ${CMAKE_CURRENT_LIST_DIR}/no-werror.patch
+        disable-warnings.patch
+        fix-buildsystem.patch
+        fix-cpu-set.patch
+        fix-deps.patch
+        pkgconfig-modules.patch
 )
 
-set(BUILD_libarchive_bzip2 OFF)
-if("bzip2" IN_LIST FEATURES)
-  set(BUILD_libarchive_bzip2 ON)
-endif()
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        bzip2   ENABLE_BZip2
+        bzip2   CMAKE_REQUIRE_FIND_PACKAGE_BZip2
+        libxml2 ENABLE_LIBXML2
+        libxml2 CMAKE_REQUIRE_FIND_PACKAGE_LibXml2
+        lz4     ENABLE_LZ4
+        lz4     CMAKE_REQUIRE_FIND_PACKAGE_lz4
+        lzma    ENABLE_LZMA
+        lzma    CMAKE_REQUIRE_FIND_PACKAGE_LibLZMA
+        lzo     ENABLE_LZO
+        openssl ENABLE_OPENSSL
+        openssl CMAKE_REQUIRE_FIND_PACKAGE_OpenSSL
+        zstd    ENABLE_ZSTD
+)
 
-set(BUILD_libarchive_libxml2 OFF)
-if("libxml2" IN_LIST FEATURES)
-  set(BUILD_libarchive_libxml2 ON)
-endif()
-
-set(BUILD_libarchive_lz4 OFF)
-if("lz4" IN_LIST FEATURES)
-  set(BUILD_libarchive_lz4 ON)
-endif()
-
-set(BUILD_libarchive_lzma OFF)
-if("lzma" IN_LIST FEATURES)
-  set(BUILD_libarchive_lzma ON)
-endif()
-
-set(BUILD_libarchive_lzo OFF)
-if("lzo" IN_LIST FEATURES)
-  set(BUILD_libarchive_lzo ON)
-endif()
-
-set(BUILD_libarchive_openssl OFF)
-if("openssl" IN_LIST FEATURES)
-  set(BUILD_libarchive_openssl ON)
-endif()
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
-        -DENABLE_BZip2=${BUILD_libarchive_bzip2}
-        -DENABLE_LIBXML2=${BUILD_libarchive_libxml2}
-        -DENABLE_LZ4=${BUILD_libarchive_lz4}
-        -DENABLE_LZMA=${BUILD_libarchive_lzma}
-        -DENABLE_LZO=${BUILD_libarchive_lzo}
-        -DENABLE_OPENSSL=${BUILD_libarchive_openssl}
+        ${FEATURE_OPTIONS}
+        -DENABLE_ZLIB=ON
         -DENABLE_PCREPOSIX=OFF
+        -DPOSIX_REGEX_LIB=NONE
         -DENABLE_NETTLE=OFF
         -DENABLE_EXPAT=OFF
         -DENABLE_LibGCC=OFF
@@ -67,19 +44,29 @@ vcpkg_configure_cmake(
         -DENABLE_CAT=OFF
         -DENABLE_XATTR=OFF
         -DENABLE_ACL=OFF
-        -DENABLE_TEST=OFF
         -DENABLE_ICONV=OFF
-        -DPOSIX_REGEX_LIB=NONE)
+        -DENABLE_LIBB2=OFF
+        -DENABLE_TEST=OFF
+        -DENABLE_WERROR=OFF
+)
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
+
+vcpkg_fixup_pkgconfig()
+
 vcpkg_copy_pdbs()
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-foreach(HEADER ${CURRENT_PACKAGES_DIR}/include/archive.h ${CURRENT_PACKAGES_DIR}/include/archive_entry.h)
-    file(READ ${HEADER} CONTENTS)
-    string(REPLACE "(!defined LIBARCHIVE_STATIC)" "0" CONTENTS "${CONTENTS}")
-    file(WRITE ${HEADER} "${CONTENTS}")
+configure_file("${CMAKE_CURRENT_LIST_DIR}/vcpkg-cmake-wrapper.cmake.in" "${CURRENT_PACKAGES_DIR}/share/${PORT}/vcpkg-cmake-wrapper.cmake" @ONLY)
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+
+if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/bin" "${CURRENT_PACKAGES_DIR}/debug/bin")
+endif()
+
+foreach(header "${CURRENT_PACKAGES_DIR}/include/archive.h" "${CURRENT_PACKAGES_DIR}/include/archive_entry.h")
+    vcpkg_replace_string("${header}" "(!defined LIBARCHIVE_STATIC)" "0")
 endforeach()
 
-file(COPY ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/libarchive)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/libarchive/COPYING ${CURRENT_PACKAGES_DIR}/share/libarchive/copyright)
+file(INSTALL "${CURRENT_PORT_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

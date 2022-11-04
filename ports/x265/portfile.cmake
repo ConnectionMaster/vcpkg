@@ -1,58 +1,61 @@
-include(vcpkg_common_functions)
-
-vcpkg_from_bitbucket(
+vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
-    REPO multicoreware/x265
-    REF 3.0
-    SHA512 698fd31bf30c65896717225de69714523bcbd3d835474f777bf32c3a6d6dbbf941a09db076e13e76917a5ca014c89fca924fcb0ea3d15bc09748b6fc834a4ba2
+    REPO videolan/x265
+    REF 07295ba7ab551bb9c1580fdaee3200f1b45711b7 #v3.4
+    SHA512 21a4ef8733a9011eec8b336106c835fbe04689e3a1b820acb11205e35d2baba8c786d9d8cf5f395e78277f921857e4eb8622cf2ef3597bce952d374f7fe9ec29
     HEAD_REF master
+    PATCHES
+        disable-install-pdb.patch
+        fix-pkgconfig-version.patch
 )
 
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}
-    PATCHES ${CMAKE_CURRENT_LIST_DIR}/disable-install-pdb.patch
-)
-
-set(ENABLE_ASSEMBLY OFF)
-if (WIN32)
+set(ASSEMBLY_OPTIONS "-DENABLE_ASSEMBLY=OFF")
+if(VCPKG_TARGET_IS_WINDOWS)
     vcpkg_find_acquire_program(NASM)
-    get_filename_component(NASM_EXE_PATH ${NASM} DIRECTORY)
-    set(ENV{PATH} "$ENV{PATH};${NASM_EXE_PATH}")
-    set(ENABLE_ASSEMBLY ON)
-endif ()
+    set(ASSEMBLY_OPTIONS "-DENABLE_ASSEMBLY=ON" "-DNASM_EXECUTABLE=${NASM}")
+endif()
 
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" ENABLE_SHARED)
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}/source
-    PREFER_NINJA
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}/source"
     OPTIONS
-        -DENABLE_ASSEMBLY=${ENABLE_ASSEMBLY}
+        ${ASSEMBLY_OPTIONS}
         -DENABLE_SHARED=${ENABLE_SHARED}
+        -DENABLE_LIBNUMA=OFF
+        -DX265_LATEST_TAG=3.4
     OPTIONS_DEBUG
         -DENABLE_CLI=OFF
+    MAYBE_UNUSED_VARIABLES
+        ENABLE_LIBNUMA
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 vcpkg_copy_pdbs()
 
-# remove duplicated include files
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+vcpkg_copy_tools(TOOL_NAMES x265 AUTO_CLEAN)
 
-file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/tools/x265)
-
-if(UNIX)
-    file(RENAME ${CURRENT_PACKAGES_DIR}/bin/x265 ${CURRENT_PACKAGES_DIR}/tools/x265/x265)
-elseif(WIN32)    
-    file(RENAME ${CURRENT_PACKAGES_DIR}/bin/x265.exe ${CURRENT_PACKAGES_DIR}/tools/x265/x265.exe)
+if(VCPKG_TARGET_IS_MINGW AND ENABLE_SHARED)
+    file(REMOVE "${CURRENT_PACKAGES_DIR}/debug/lib/libx265.a")
+    file(REMOVE "${CURRENT_PACKAGES_DIR}/lib/libx265.a")
 endif()
 
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/bin)
+vcpkg_fixup_pkgconfig()
+vcpkg_list(SET pc_files "${CURRENT_PACKAGES_DIR}/lib/pkgconfig/x265.pc")
+if(NOT VCPKG_BUILD_TYPE)
+    vcpkg_list(APPEND pc_files "${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig/x265.pc")
 endif()
-
-vcpkg_copy_tool_dependencies(${CURRENT_PACKAGES_DIR}/tools/x265)
+foreach(FILE IN LISTS pc_files)
+    file(READ "${FILE}" _contents)
+    if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
+        string(REPLACE "-lx265" "-lx265-static" _contents "${_contents}")
+    else()
+        string(REPLACE " -lgcc_s" "" _contents "${_contents}")
+        string(REPLACE " -lgcc" "" _contents "${_contents}")
+    endif()
+    file(WRITE "${FILE}" "${_contents}")
+endforeach()
 
 # Handle copyright
-file(COPY ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/x265)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/x265/COPYING ${CURRENT_PACKAGES_DIR}/share/x265/copyright)
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

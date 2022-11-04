@@ -1,71 +1,56 @@
-include(vcpkg_common_functions)
-
-if (VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    message(STATUS "Warning: Dynamic building not supported yet. Building static.")
-    set(VCPKG_LIBRARY_LINKAGE static)
-endif()
-
-set(SUITESPARSE_VER SuiteSparse-5.1.2)  #if you change the version, becarefull of changing the SHA512 checksum accordingly
-set(SUITESPARSEWIN_VER 1.4.0)
-set(SUITESPARSEWIN_PATH ${CURRENT_BUILDTREES_DIR}/src/suitesparse-metis-for-windows-${SUITESPARSEWIN_VER})
-set(SUITESPARSE_PATH ${SUITESPARSEWIN_PATH}/Suitesparse)
-
-#download suitesparse libary
-vcpkg_download_distfile(SUITESPARSE
-    URLS "http://faculty.cse.tamu.edu/davis/SuiteSparse/${SUITESPARSE_VER}.tar.gz"
-    FILENAME "${SUITESPARSE_VER}.tar.gz"
-    SHA512 38c7f9847cf161390f73de39ed3d9fd07f7bcec2d6d4e6f141af6a015826215843db9f2e16ca255eeb233c593ffc19ffa04816aa5b6ba200b55b9472ac33ba85
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO DrTimothyAldenDavis/SuiteSparse
+    REF 71e330ca2bc0a2f12f416c461d23dbca21db4d8f
+    SHA512 06c75927c924cfd5511b07504e826714f504586243d6f3449d67408a33f3ecea824a7f2de7a165171791b9bda4fc09c0d7093125970895c2ed8d4d37ca1d5a3d
+    HEAD_REF master
 )
 
-#download suitesparse-metis-for-windows scripts, suitesparse does not have CMake build system, jlblancoc has made one for it
-vcpkg_download_distfile(SUITESPARSEWIN
-    URLS  "https://github.com/jlblancoc/suitesparse-metis-for-windows/archive/v${SUITESPARSEWIN_VER}.zip"
-    FILENAME "suitesparse-metis-for-windows-${SUITESPARSEWIN_VER}.zip"
-    SHA512 2859d534200ab9b76fca1530eae5de2f9328aa867c727dbc83a96c6f16e1f87e70123fb2decbb84531d75dac58b6f0ce7323e48c57aeede324fd9a1f77ba74c6
+vcpkg_from_github(
+    OUT_SOURCE_PATH SUITESPARSEWIN_SOURCE_PATH
+    REPO jlblancoc/suitesparse-metis-for-windows
+    REF c11e8dd7a2ef7d0d93af4c16f75374dd8ca029e2
+    SHA512 fbd2a9e6f7df47eeb5d890c7b286bef7fc4c8bcb22783ce800723bacaf2cfe902177828ce5b9e1c2ed9fb5c54591c5fb046a8667e7d354d452a4baac693e47d2
+    HEAD_REF master
+    PATCHES
+        build_fixes.patch
 )
 
-#extract suitesparse-metis-for-windows first and merge with suitesparse library
-vcpkg_extract_source_archive(${SUITESPARSEWIN})
-vcpkg_extract_source_archive(${SUITESPARSE} ${SUITESPARSEWIN_PATH})
-
-vcpkg_apply_patches(
-    SOURCE_PATH ${SUITESPARSEWIN_PATH}
-    PATCHES "${CMAKE_CURRENT_LIST_DIR}/fix-install-suitesparse.patch"
-    PATCHES "${CMAKE_CURRENT_LIST_DIR}/remove-debug-postfix.patch"
-)
-
-set(USE_VCPKG_METIS OFF)
-if("metis" IN_LIST FEATURES)
-    set(USE_VCPKG_METIS ON)
-endif()
+# Copy suitesparse sources.
+message(STATUS "Overwriting SuiteSparseWin source files with SuiteSparse source files...")
+# Should probably remove everything but CMakeLists.txt files?
+file(GLOB SUITESPARSE_SOURCE_FILES ${SOURCE_PATH}/*)
+foreach(SOURCE_FILE ${SUITESPARSE_SOURCE_FILES})
+    file(COPY ${SOURCE_FILE} DESTINATION "${SUITESPARSEWIN_SOURCE_PATH}/SuiteSparse")
+endforeach()
+message(STATUS "Overwriting SuiteSparseWin source files with SuiteSparse source files... done")
+message(STATUS "Removing integrated lapack and metis lib...")
+file(REMOVE_RECURSE ${SUITESPARSEWIN_SOURCE_PATH}/lapack_windows)
+file(REMOVE_RECURSE ${SUITESPARSEWIN_SOURCE_PATH}/SuiteSparse/metis-5.1.0)
+message(STATUS "Removing integrated lapack and metis lib... done")
 
 vcpkg_configure_cmake(
-    SOURCE_PATH ${SUITESPARSEWIN_PATH}
+    SOURCE_PATH ${SUITESPARSEWIN_SOURCE_PATH}
     PREFER_NINJA
     OPTIONS
-        -DBUILD_METIS=OFF #Disable the option to build metis from source
-        -DUSE_VCPKG_METIS=${USE_VCPKG_METIS} #Force using vcpckg metis library
-        -DMETIS_SOURCE_DIR=${CURRENT_INSTALLED_DIR}
-        -DLIB_POSTFIX=
-        -DSUITESPARSE_USE_CUSTOM_BLAS_LAPACK_LIBS=ON
-        -DSUITESPARSE_CUSTOM_BLAS_LIB=${CURRENT_INSTALLED_DIR}/lib/openblas.lib
-        -DSUITESPARSE_CUSTOM_LAPACK_LIB=${CURRENT_INSTALLED_DIR}/lib/lapack.lib
+        -DBUILD_METIS=OFF
+        -DUSE_VCPKG_METIS=ON
+        "-DMETIS_SOURCE_DIR=${CURRENT_INSTALLED_DIR}"
      OPTIONS_DEBUG
-        -DSUITESPARSE_INSTALL_PREFIX=${CURRENT_PACKAGES_DIR}/debug
+        -DSUITESPARSE_INSTALL_PREFIX="${CURRENT_PACKAGES_DIR}/debug"
      OPTIONS_RELEASE
-        -DSUITESPARSE_INSTALL_PREFIX=${CURRENT_PACKAGES_DIR}
+        -DSUITESPARSE_INSTALL_PREFIX="${CURRENT_PACKAGES_DIR}"
 )
 
 vcpkg_install_cmake()
 
-vcpkg_fixup_cmake_targets(CONFIG_PATH "lib/cmake")
+vcpkg_fixup_cmake_targets(CONFIG_PATH lib/cmake/suitesparse)
 
-#clean folders
 file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
 
-# Handle copyright of suitesparse and suitesparse-metis-for-windows
-file(COPY ${SUITESPARSE_PATH}/LICENSE.txt DESTINATION ${CURRENT_PACKAGES_DIR}/share/suitesparse)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/suitesparse/LICENSE.txt ${CURRENT_PACKAGES_DIR}/share/suitesparse/copyright)
+file(INSTALL ${SOURCE_PATH}/LICENSE.txt DESTINATION ${CURRENT_PACKAGES_DIR}/share/${PORT} RENAME copyright)
+file(INSTALL ${SUITESPARSEWIN_SOURCE_PATH}/LICENSE.md DESTINATION ${CURRENT_PACKAGES_DIR}/share/${PORT} RENAME copyright_suitesparse-metis-for-windows)
 
-file(COPY ${SUITESPARSEWIN_PATH}/LICENSE.md DESTINATION ${CURRENT_PACKAGES_DIR}/share/suitesparse)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/suitesparse/LICENSE.md ${CURRENT_PACKAGES_DIR}/share/suitesparse/copyright_suitesparse-metis-for-windows)
+file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/share/cxsparse)
+file(INSTALL ${CMAKE_CURRENT_LIST_DIR}/vcpkg-cmake-wrapper_cxsparse.cmake DESTINATION ${CURRENT_PACKAGES_DIR}/share/cxsparse RENAME vcpkg-cmake-wrapper.cmake)
+file(COPY ${CMAKE_CURRENT_LIST_DIR}/FindCXSparse.cmake DESTINATION ${CURRENT_PACKAGES_DIR}/share/cxsparse)

@@ -1,133 +1,143 @@
-include(vcpkg_common_functions)
-
-set(X264_VERSION 157)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO mirror/x264
-    REF 303c484ec828ed0d8bfe743500e70314d026c3bd
-    SHA512 faf210a3f9543028ed882c8348b243dd7ae6638e7b3ef43bec1326b717f23370f57c13d0ddb5e1ae94411088a2e33031a137b68ae9f64c18f8f33f601a0da54d
-    HEAD_REF master
-)
-
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}
+    REF baee400fa9ced6f5481a728138fed6e867b0ff7f # 0.164.3095 in pc file, to be updated below
+    SHA512 3c7147457cbe0fea20cf3ed8cf7bbdca9ac15060cf86f81b9b5b54b018f922964e91b3c38962c81fedef92bc5b14489e04d0966d03d2b7a85b4dabab6ad816a2
+    HEAD_REF stable
     PATCHES
-        ${CMAKE_CURRENT_LIST_DIR}/uwp-cflags.patch
+        uwp-cflags.patch
+        parallel-install.patch
+        allow-clang-cl.patch
+        configure-as.patch # Ignore ':' from `vcpkg_configure_make`
 )
 
-# Acquire tools
-vcpkg_acquire_msys(MSYS_ROOT PACKAGES make automake1.15)
+vcpkg_replace_string("${SOURCE_PATH}/configure" [[/bin/bash]] [[/usr/bin/env bash]])
 
-# Insert msys into the path between the compiler toolset and windows system32. This prevents masking of "link.exe" but DOES mask "find.exe".
-string(REPLACE ";$ENV{SystemRoot}\\system32;" ";${MSYS_ROOT}/usr/bin;$ENV{SystemRoot}\\system32;" NEWPATH "$ENV{PATH}")
-set(ENV{PATH} "${NEWPATH}")
-set(BASH ${MSYS_ROOT}/usr/bin/bash.exe)
+# Note on x264 versioning:
+# The pc file exports "0.164.<N>" where is the number of commits.
+# This must be fixed here because vcpkg uses a GH tarball instead of cloning the source.
+# (The binary releases on https://artifacts.videolan.org/x264/ are named x264-r<N>-<COMMIT>.)
+vcpkg_replace_string("${SOURCE_PATH}/version.sh" [[ver="x"]] [[ver="3095"]])
 
-set(AUTOMAKE_DIR ${MSYS_ROOT}/usr/share/automake-1.15)
-#file(COPY ${AUTOMAKE_DIR}/config.guess ${AUTOMAKE_DIR}/config.sub DESTINATION ${SOURCE_PATH}/source)
-
-set(CONFIGURE_OPTIONS "--host=i686-pc-mingw32 --enable-strip --disable-lavf --disable-swscale --disable-asm --disable-avs --disable-ffms --disable-gpac --disable-lsmash")
-
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
-    set(CONFIGURE_OPTIONS "${CONFIGURE_OPTIONS} --enable-shared")
-    if (VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-        set(CONFIGURE_OPTIONS "${CONFIGURE_OPTIONS} --extra-ldflags=-APPCONTAINER --extra-ldflags=WindowsApp.lib")
+# Ensure that 'ENV{PATH}' leads to tool 'name' exactly at 'filepath'.
+function(ensure_tool_in_path name filepath)
+    unset(program_found CACHE)
+    find_program(program_found "${name}" PATHS ENV PATH NO_DEFAULT_PATH NO_CACHE)
+    if(NOT filepath STREQUAL program_found)
+        cmake_path(GET filepath PARENT_PATH parent_path)
+        vcpkg_add_to_path(PREPEND "${parent_path}")
     endif()
+endfunction()
+
+# Ensure that parent-scope variable 'var' doesn't contain a space,
+# updating 'ENV{PATH}' and 'var' if needed.
+function(transform_path_no_space var)
+    set(path "${${var}}")
+    if(path MATCHES " ")
+        cmake_path(GET path FILENAME program_name)
+        set("${var}" "${program_name}" PARENT_SCOPE)
+        ensure_tool_in_path("${program_name}" "${path}")
+    endif()
+endfunction()
+
+vcpkg_cmake_get_vars(cmake_vars_file)
+include("${cmake_vars_file}")
+
+transform_path_no_space(VCPKG_DETECTED_CMAKE_C_COMPILER)
+set(ENV{CC} "${VCPKG_DETECTED_CMAKE_C_COMPILER}")
+
+vcpkg_list(SET OPTIONS)
+if(VCPKG_DETECTED_CMAKE_C_COMPILER MATCHES "([^\/]*-)gcc$")
+    vcpkg_list(APPEND OPTIONS "--cross-prefix=${CMAKE_MATCH_1}")
+endif()
+
+vcpkg_list(SET EXTRA_ARGS)
+set(nasm_archs x86 x64)
+set(gaspp_archs arm arm64)
+if(NOT "asm" IN_LIST FEATURES)
+    vcpkg_list(APPEND OPTIONS --disable-asm)
+elseif(NOT "$ENV{AS}" STREQUAL "")
+    # Accept setting from triplet
+elseif(VCPKG_TARGET_ARCHITECTURE IN_LIST nasm_archs)
+    vcpkg_find_acquire_program(NASM)
+    transform_path_no_space(NASM)
+    list(APPEND EXTRA_ARGS CONFIGURE_ENVIRONMENT_VARIABLES AS)
+    set(AS "${NASM}") # for CONFIGURE_ENVIRONMENT_VARIABLES
+    set(ENV{AS} "${NASM}") # for non-WIN32
+elseif(VCPKG_TARGET_ARCHITECTURE IN_LIST gaspp_archs AND VCPKG_TARGET_IS_WINDOWS AND VCPKG_HOST_IS_WINDOWS)
+    vcpkg_find_acquire_program(GASPREPROCESSOR)
+    list(FILTER GASPREPROCESSOR INCLUDE REGEX gas-preprocessor)
+    file(INSTALL "${GASPREPROCESSOR}" DESTINATION "${SOURCE_PATH}/tools" RENAME "gas-preprocessor.pl")
+endif()
+
+vcpkg_list(SET OPTIONS_RELEASE)
+if("tool" IN_LIST FEATURES)
+    vcpkg_list(APPEND OPTIONS_RELEASE --enable-cli)
 else()
-    set(CONFIGURE_OPTIONS "${CONFIGURE_OPTIONS} --enable-static")
+    vcpkg_list(APPEND OPTIONS_RELEASE --disable-cli)
 endif()
 
-if(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-    set(ENV{LIBPATH} "$ENV{LIBPATH};$ENV{_WKITS10}references\\windows.foundation.foundationcontract\\2.0.0.0\\;$ENV{_WKITS10}references\\windows.foundation.universalapicontract\\3.0.0.0\\")
-    set(CONFIGURE_OPTIONS "${CONFIGURE_OPTIONS} --extra-cflags=-DWINAPI_FAMILY=WINAPI_FAMILY_APP --extra-cflags=-D_WIN32_WINNT=0x0A00")
+if(VCPKG_TARGET_IS_UWP)
+    list(APPEND OPTIONS --extra-cflags=-D_WIN32_WINNT=0x0A00)
 endif()
 
-set(CONFIGURE_OPTIONS_RELEASE "--prefix=${CURRENT_PACKAGES_DIR}")
-set(CONFIGURE_OPTIONS_DEBUG  "--enable-debug --prefix=${CURRENT_PACKAGES_DIR}/debug")
-
-if(VCPKG_CRT_LINKAGE STREQUAL "static")
-    set(X264_RUNTIME "-MT")
-else()
-    set(X264_RUNTIME "-MD")
+if(VCPKG_TARGET_IS_LINUX)
+    list(APPEND OPTIONS --enable-pic)
 endif()
 
-# Configure release
-message(STATUS "Configuring ${TARGET_TRIPLET}-rel")
-file(REMOVE_RECURSE ${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel)
-file(MAKE_DIRECTORY ${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel)
-set(ENV{CFLAGS} "${X264_RUNTIME} -O2 -Oi -Zi")
-set(ENV{CXXFLAGS} "${X264_RUNTIME} -O2 -Oi -Zi")
-set(ENV{LDFLAGS} "-DEBUG -INCREMENTAL:NO -OPT:REF -OPT:ICF")
-vcpkg_execute_required_process(
-    COMMAND ${BASH} --noprofile --norc -c 
-        "CC=cl ${SOURCE_PATH}/configure ${CONFIGURE_OPTIONS} ${CONFIGURE_OPTIONS_RELEASE}"
-    WORKING_DIRECTORY "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel"
-    LOGNAME "configure-${TARGET_TRIPLET}-rel")
-message(STATUS "Configuring ${TARGET_TRIPLET}-rel done")
-
-# Configure debug
-message(STATUS "Configuring ${TARGET_TRIPLET}-dbg")
-file(REMOVE_RECURSE ${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg)
-file(MAKE_DIRECTORY ${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg)
-set(ENV{CFLAGS} "${X264_RUNTIME}d -Od -Zi -RTC1")
-set(ENV{CXXFLAGS} "${X264_RUNTIME}d -Od -Zi -RTC1")
-set(ENV{LDFLAGS} "-DEBUG")
-vcpkg_execute_required_process(
-    COMMAND ${BASH} --noprofile --norc -c 
-        "CC=cl ${SOURCE_PATH}/configure ${CONFIGURE_OPTIONS} ${CONFIGURE_OPTIONS_DEBUG}"
-    WORKING_DIRECTORY "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg"
-    LOGNAME "configure-${TARGET_TRIPLET}-dbg")
-message(STATUS "Configuring ${TARGET_TRIPLET}-dbg done")
-
-unset(ENV{CFLAGS})
-unset(ENV{CXXFLAGS})
-unset(ENV{LDFLAGS})
-
-# Build release
-message(STATUS "Package ${TARGET_TRIPLET}-rel")
-vcpkg_execute_required_process(
-    COMMAND ${BASH} --noprofile --norc -c "make && make install"
-    WORKING_DIRECTORY "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel"
-    LOGNAME "build-${TARGET_TRIPLET}-rel")
-message(STATUS "Package ${TARGET_TRIPLET}-rel done")
-
-# Build debug
-message(STATUS "Package ${TARGET_TRIPLET}-dbg")
-vcpkg_execute_required_process(
-    COMMAND ${BASH} --noprofile --norc -c "make && make install"
-    WORKING_DIRECTORY "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg"
-    LOGNAME "build-${TARGET_TRIPLET}-dbg")
-message(STATUS "Package ${TARGET_TRIPLET}-dbg done")
-
-if(NOT VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-    file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/tools/x264)
-    file(RENAME ${CURRENT_PACKAGES_DIR}/bin/x264.exe ${CURRENT_PACKAGES_DIR}/tools/x264/x264.exe)
-endif()
-
-file(REMOVE_RECURSE
-    ${CURRENT_PACKAGES_DIR}/lib/pkgconfig
-    ${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig
-    ${CURRENT_PACKAGES_DIR}/debug/bin/x264.exe
-    ${CURRENT_PACKAGES_DIR}/debug/include
+vcpkg_configure_make(
+    SOURCE_PATH "${SOURCE_PATH}"
+    NO_ADDITIONAL_PATHS
+    DETERMINE_BUILD_TRIPLET
+    ${EXTRA_ARGS}
+    OPTIONS
+        ${OPTIONS}
+        --disable-lavf
+        --disable-swscale
+        --disable-avs
+        --disable-ffms
+        --disable-gpac
+        --disable-lsmash
+        --disable-bashcompletion
+    OPTIONS_RELEASE
+        ${OPTIONS_RELEASE}
+        --enable-strip
+    OPTIONS_DEBUG
+        --enable-debug
+        --disable-cli
 )
 
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
-    file(RENAME ${CURRENT_PACKAGES_DIR}/lib/libx264.dll.lib ${CURRENT_PACKAGES_DIR}/lib/libx264.lib)
-    file(RENAME ${CURRENT_PACKAGES_DIR}/debug/lib/libx264.dll.lib ${CURRENT_PACKAGES_DIR}/debug/lib/libx264.lib)
-else()
-    # force U_STATIC_IMPLEMENTATION macro
-    file(READ ${CURRENT_PACKAGES_DIR}/include/x264.h HEADER_CONTENTS)
-    string(REPLACE "defined(U_STATIC_IMPLEMENTATION)" "1" HEADER_CONTENTS "${HEADER_CONTENTS}")
-    file(WRITE ${CURRENT_PACKAGES_DIR}/include/x264.h "${HEADER_CONTENTS}")
+vcpkg_install_make()
 
+if("tool" IN_LIST FEATURES)
+    vcpkg_copy_tools(TOOL_NAMES x264 AUTO_CLEAN)
+endif()
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+
+if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/lib/pkgconfig/x264.pc" "-lx264" "-llibx264")
+    if(NOT VCPKG_BUILD_TYPE)
+        vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig/x264.pc" "-lx264" "-llibx264")
+    endif()
+endif()
+
+if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic" AND VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
+    file(RENAME "${CURRENT_PACKAGES_DIR}/lib/libx264.dll.lib" "${CURRENT_PACKAGES_DIR}/lib/libx264.lib")
+    if (NOT VCPKG_BUILD_TYPE)
+        file(RENAME "${CURRENT_PACKAGES_DIR}/debug/lib/libx264.dll.lib" "${CURRENT_PACKAGES_DIR}/debug/lib/libx264.lib")
+    endif()
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/x264.h" "#ifdef X264_API_IMPORTS" "#if 1")
+elseif(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/x264.h" "defined(U_STATIC_IMPLEMENTATION)" "1")
     file(REMOVE_RECURSE
-        ${CURRENT_PACKAGES_DIR}/bin
-        ${CURRENT_PACKAGES_DIR}/debug/bin
+        "${CURRENT_PACKAGES_DIR}/bin"
+        "${CURRENT_PACKAGES_DIR}/debug/bin"
     )
 endif()
 
+vcpkg_fixup_pkgconfig()
+
 vcpkg_copy_pdbs()
 
-file(COPY ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/x264)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/x264/COPYING ${CURRENT_PACKAGES_DIR}/share/x264/copyright)
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

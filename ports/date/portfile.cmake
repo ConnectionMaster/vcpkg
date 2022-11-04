@@ -1,8 +1,6 @@
-include(vcpkg_common_functions)
-
-if(NOT VCPKG_CMAKE_SYSTEM_NAME OR VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
+if(VCPKG_TARGET_IS_WINDOWS)
   message(WARNING
-    "You will need to also install http://unicode.org/repos/cldr/trunk/common/supplemental/windowsZones.xml into your install location.\n"
+    "You will need to also install https://raw.githubusercontent.com/unicode-org/cldr/master/common/supplemental/windowsZones.xml into your install location.\n"
     "See https://howardhinnant.github.io/date/tz.html"
   )
 endif()
@@ -10,37 +8,37 @@ endif()
 vcpkg_from_github(
   OUT_SOURCE_PATH SOURCE_PATH
   REPO HowardHinnant/date
-  REF 9dc96fd9b5e4e1e7885aa80dc24a3ceb407c3730
-  SHA512 1acb78f1ae7f5b1278a9e034fa5ccbb64643ad381ef9bd76bf42fb04d714c6742f2129b6892024cd98bb925e1a6136337fccb636e3f991b428be1ed05ab8901e
+  REF v3.0.1
+  SHA512 6bdc7cba821d66e17a559250cc0ce0095808e9db81cec9e16eaa4c31abdfa705299c67b72016d9b06b302bc306d063e83a374eb00728071b83a5ad650d59034f
   HEAD_REF master
+  PATCHES
+    0001-fix-uwp.patch
+    0002-fix-cmake-3.14.patch
+    fix-uninitialized-values.patch  #Update the new version please remove this patch
 )
 
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    INVERTED_FEATURES
+    remote-api USE_SYSTEM_TZ_DB
+)
 
-set(HAS_REMOTE_API 0)
-if("remote-api" IN_LIST FEATURES)
-  set(HAS_REMOTE_API 1)
+vcpkg_cmake_configure(
+  SOURCE_PATH "${SOURCE_PATH}"
+  OPTIONS
+    ${FEATURE_OPTIONS}
+    -DBUILD_TZ_LIB=ON
+)
+
+vcpkg_cmake_install()
+
+if(VCPKG_TARGET_IS_WINDOWS)
+  vcpkg_cmake_config_fixup(CONFIG_PATH CMake)
+else()
+  vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/date)
 endif()
-
-vcpkg_configure_cmake(
-  SOURCE_PATH ${SOURCE_PATH}
-  PREFER_NINJA
-  OPTIONS -DHAS_REMOTE_API=${HAS_REMOTE_API}
-  OPTIONS_DEBUG -DDISABLE_INSTALL_HEADERS=ON
-)
-
-vcpkg_install_cmake()
-
-vcpkg_fixup_cmake_targets(CONFIG_PATH share/unofficial-date TARGET_PATH share/unofficial-date)
 
 vcpkg_copy_pdbs()
 
-set(HEADER "${CURRENT_PACKAGES_DIR}/include/date/tz.h")
-file(READ "${HEADER}" _contents)
-string(REPLACE "#define TZ_H" "#define TZ_H\n#undef HAS_REMOTE_API\n#define HAS_REMOTE_API ${HAS_REMOTE_API}" _contents "${_contents}")
-if(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-  string(REPLACE "ifdef DATE_BUILD_DLL" "if 1" _contents "${_contents}")
-endif()
-file(WRITE "${HEADER}" "${_contents}")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
 
-file(INSTALL ${SOURCE_PATH}/LICENSE.txt DESTINATION ${CURRENT_PACKAGES_DIR}/share/date RENAME copyright)
+file(INSTALL "${SOURCE_PATH}/LICENSE.txt" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

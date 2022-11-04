@@ -1,58 +1,51 @@
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "static" OR VCPKG_CRT_LINKAGE STREQUAL "static")
-    message(FATAL_ERROR "ismrmrd only supports dynamic library and crt linkage")
+if (VCPKG_TARGET_ARCHITECTURE MATCHES "x86")
+    set(WIN32_INCLUDE_STDDEF_PATCH "x86-windows-include-stddef.patch")
 endif()
-
-include(vcpkg_common_functions)
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO ismrmrd/ismrmrd
-    REF v1.3.2
-    SHA512 eb806f71c4b183105b3270d658a68195e009c0f7ca37f54f76d650a4d5c83c44d26b5f12a4c47c608aae9990cd04f1204b0c57e6438ca34a271fd54880133106
+    REF v1.5.0 
+    SHA512 96e24be75ecde8e56001d805ffaf4502d39c87e2c4fe01c84c90cb01d8bd49268c48440728de2ffb4c3efa75a029b3ffc0101b5841893685f82b4fafec9b1c73
     HEAD_REF master
-	PATCHES
-		# Makes optional hdf5 dependency explicit
-		optional_hdf5_dependency.patch
+    PATCHES
+        ${WIN32_INCLUDE_STDDEF_PATCH}
+        fix-depends-hdf5.patch
 )
 
-if ("dataset" IN_LIST FEATURES)
-    set(ENABLE_DATASET ON)
-else()
-    set(ENABLE_DATASET OFF)
-endif()
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
-    OPTIONS 
-		-DUSE_SYSTEM_PUGIXML=ON
-		-DUSE_HDF5_DATASET_SUPPORT=${ENABLE_DATASET}
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DUSE_SYSTEM_PUGIXML=ON
+        -DUSE_HDF5_DATASET_SUPPORT=ON
+        -DVCPKG_TARGET_TRIPLET=ON
+        -DBUILD_TESTS=OFF
+        -DBUILD_EXAMPLES=OFF
+        -DBUILD_UTILITIES=OFF
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 vcpkg_copy_pdbs()
+vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/ISMRMRD/)
 
-vcpkg_fixup_cmake_targets(CONFIG_PATH share/ismrmrd/cmake)
-
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/share)
-
-if(EXISTS ${CURRENT_PACKAGES_DIR}/lib/ismrmrd.dll)
-    file(COPY ${CURRENT_PACKAGES_DIR}/lib/ismrmrd.dll DESTINATION ${CURRENT_PACKAGES_DIR}/bin)
-    file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/lib/ismrmrd.dll)
+if(EXISTS "${CURRENT_PACKAGES_DIR}/lib/ismrmrd.dll")
+    file(COPY "${CURRENT_PACKAGES_DIR}/lib/ismrmrd.dll" DESTINATION "${CURRENT_PACKAGES_DIR}/bin")
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/lib/ismrmrd.dll")
 endif()
 
-if(EXISTS ${CURRENT_PACKAGES_DIR}/debug/lib/ismrmrd.dll)
-    file(COPY ${CURRENT_PACKAGES_DIR}/debug/lib/ismrmrd.dll DESTINATION ${CURRENT_PACKAGES_DIR}/debug/bin)
-    file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/lib/ismrmrd.dll)
+if(EXISTS "${CURRENT_PACKAGES_DIR}/debug/lib/ismrmrd.dll")
+    file(COPY "${CURRENT_PACKAGES_DIR}/debug/lib/ismrmrd.dll" DESTINATION "${CURRENT_PACKAGES_DIR}/debug/bin")
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/lib/ismrmrd.dll")
 endif()
 
-file(COPY ${CURRENT_PACKAGES_DIR}/bin/ismrmrd_info.exe DESTINATION ${CURRENT_PACKAGES_DIR}/tools/ismrmrd)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/share/ismrmrd/cmake")
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/bin/ismrmrd_info.exe)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/bin/ismrmrd_info.exe)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
 
-file(COPY ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/ismrmrd)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/ismrmrd/LICENSE ${CURRENT_PACKAGES_DIR}/share/ismrmrd/copyright)
+if(VCPKG_LIBRARY_LINKAGE STREQUAL static)
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/bin/")
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/bin/")
+endif()
 
-vcpkg_copy_tool_dependencies(${CURRENT_PACKAGES_DIR}/tools/ismrmrd)
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

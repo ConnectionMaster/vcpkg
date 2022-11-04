@@ -1,28 +1,35 @@
-include(vcpkg_common_functions)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO JuliaLang/utf8proc
-    REF v2.1.0
-    SHA512 72b7f377fa6a62018d3eeab8723a27e25db3d1f794ae0bf21fff62ec1a7439bec52e7c93d2a00c218de6ff518097fb4a7a87c56e61ba8c98e689aa8f7171c812)
+    REF 8ca6144c85c165987cb1c5d8395c7314e13d4cd7 # v2.7.0
+    SHA512 a33e2335e9978e7a49bc0ecf9128abd93466d9daffb052f9db88097e771588547df6ba07b6028c77621e60f3b85eab78a368d9b8266ecb97ad7bdfae2b4866fc
+    PATCHES
+        export-cmake-targets.patch
+)
 
-vcpkg_apply_patches(SOURCE_PATH ${SOURCE_PATH}
-    PATCHES ${CMAKE_CURRENT_LIST_DIR}/fix-buildsystem.patch)
-
-vcpkg_configure_cmake(
+vcpkg_cmake_configure(
     SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA)
+    OPTIONS
+        -DUTF8PROC_ENABLE_TESTING=OFF
+        -DUTF8PROC_INSTALL=ON
+)
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
+
+vcpkg_cmake_config_fixup(PACKAGE_NAME unofficial-utf8proc CONFIG_PATH share/unofficial-utf8proc)
+
 vcpkg_copy_pdbs()
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
 
-file(READ ${CURRENT_PACKAGES_DIR}/include/utf8proc.h UTF8PROC_H)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include" "${CURRENT_PACKAGES_DIR}/debug/share")
+
+file(READ "${CURRENT_PACKAGES_DIR}/include/utf8proc.h" UTF8PROC_H)
 if(VCPKG_LIBRARY_LINKAGE STREQUAL static)
     string(REPLACE "defined UTF8PROC_SHARED" "0" UTF8PROC_H "${UTF8PROC_H}")
 else()
     string(REPLACE "defined UTF8PROC_SHARED" "1" UTF8PROC_H "${UTF8PROC_H}")
 endif()
-file(WRITE ${CURRENT_PACKAGES_DIR}/include/utf8proc.h "${UTF8PROC_H}")
+file(WRITE "${CURRENT_PACKAGES_DIR}/include/utf8proc.h" "${UTF8PROC_H}")
 
-file(COPY ${SOURCE_PATH}/LICENSE.md DESTINATION ${CURRENT_PACKAGES_DIR}/share/utf8proc)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/utf8proc/LICENSE.md ${CURRENT_PACKAGES_DIR}/share/utf8proc/copyright)
+vcpkg_fixup_pkgconfig()
+
+file(INSTALL "${SOURCE_PATH}/LICENSE.md" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

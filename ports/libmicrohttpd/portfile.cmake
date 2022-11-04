@@ -1,23 +1,52 @@
-include(vcpkg_common_functions)
-set(SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/libmicrohttpd-0.9.55)
+set(MICROHTTPD_VERSION 0.9.75)
+
 vcpkg_download_distfile(ARCHIVE
-    URLS "ftp://ftp.gnu.org/gnu/libmicrohttpd/libmicrohttpd-0.9.55.tar.gz"
-    FILENAME "libmicrohttpd-0.9.55.tar.gz"
-    SHA512 b410e7253d7c98c40b5e8b8dcd1f93bcbb05c88717190e8dae73073d36465e8e5cfa53c6c5098de60051a5ec64dc423fd94f4b06537d8146b744aa99f5a0b173
-)
-vcpkg_extract_source_archive(${ARCHIVE})
-
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
-
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
-    OPTIONS_DEBUG -DDISABLE_INSTALL_HEADERS=ON
+    URLS
+        "https://ftp.gnu.org/gnu/libmicrohttpd/libmicrohttpd-${MICROHTTPD_VERSION}.tar.gz"
+        "https://www.mirrorservice.org/sites/ftp.gnu.org/gnu/libmicrohttpd/libmicrohttpd-${MICROHTTPD_VERSION}.tar.gz"
+    FILENAME "libmicrohttpd-${MICROHTTPD_VERSION}.tar.gz"
+    SHA512 4dc62ed191342a61cc2767171bb1ff4050f390db14ef7100299888237b52ea0b04b939c843878fe7f5daec2b35a47b3c1b7e7c11fb32d458184fe6b19986a37c
 )
 
-vcpkg_install_cmake()
+vcpkg_extract_source_archive_ex(
+    ARCHIVE "${ARCHIVE}"
+    OUT_SOURCE_PATH SOURCE_PATH
+)
 
-vcpkg_copy_pdbs()
+if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
+    if (VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
+        set(CFG_SUFFIX "dll")
+    else()
+        set(CFG_SUFFIX "static")
+    endif()
 
-file(INSTALL ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/libmicrohttpd RENAME copyright)
+    vcpkg_install_msbuild(
+        SOURCE_PATH "${SOURCE_PATH}"
+        PROJECT_SUBPATH w32/VS2015/libmicrohttpd.vcxproj
+        RELEASE_CONFIGURATION "Release-${CFG_SUFFIX}"
+        DEBUG_CONFIGURATION "Debug-${CFG_SUFFIX}"
+    )
+    
+    file(GLOB MICROHTTPD_HEADERS "${SOURCE_PATH}/src/include/microhttpd*.h")
+    file(COPY ${MICROHTTPD_HEADERS} DESTINATION "${CURRENT_PACKAGES_DIR}/include")
+else()
+    if(VCPKG_TARGET_IS_OSX AND VCPKG_LIBRARY_LINKAGE STREQUAL "static")
+        set(ENV{LIBS} "$ENV{LIBS} -framework Foundation -framework AppKit") # TODO: Get this from the extracted cmake vars somehow
+    endif()
+    vcpkg_configure_make(
+        SOURCE_PATH "${SOURCE_PATH}"
+        OPTIONS
+            --disable-doc
+            --disable-examples
+            --disable-curl
+            --disable-https
+            --with-gnutls=no
+    )
+
+    vcpkg_install_make()
+    vcpkg_fixup_pkgconfig()
+    
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+endif()
+
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

@@ -3,12 +3,9 @@ cmake_minimum_required (VERSION 3.0)
 project (gamma)
 
 # dependent on libsndfile and portaudio
-find_path(LIBSNDFILE_H sndfile.h)
-find_library(LIBSNDFILE_LIB NAMES libsndfile-1 libsndfile)
+find_package(SndFile CONFIG REQUIRED)
 find_path(PORTAUDIO_H portaudio.h)
 find_library(PORTAUDIO_LIB NAMES portaudio)
-
-set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
 
 set(SOURCEFILES
         src/arr.cpp
@@ -27,10 +24,10 @@ set(SOURCEFILES
         src/Timer.cpp
         src/SoundFile.cpp)
 
-include_directories(. Gamma ${CMAKE_INSTALL_FULL_INCLUDEDIR} ${PORTAUDIO_H} ${LIBSNDFILE_H})
+include_directories(. Gamma ${CMAKE_INSTALL_FULL_INCLUDEDIR} ${PORTAUDIO_H})
 
 add_library (gamma ${SOURCEFILES})
-target_link_libraries(gamma PUBLIC ${LIBSNDFILE_LIB} ${PORTAUDIO_LIB})
+target_link_libraries(gamma PUBLIC SndFile::sndfile ${PORTAUDIO_LIB})
 
 install(
   TARGETS gamma

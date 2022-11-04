@@ -18,10 +18,8 @@ set (SRCS
 
 if(MSVC)
   add_compile_options(/W4 -D_CRT_SECURE_NO_WARNINGS -DTARGET_OS_WIN32)
-endif()
-
-if(BUILD_SHARED_LIBS)
-  set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
+else()
+  add_compile_options(-Wno-error=implicit-function-declaration)
 endif()
 
 include_directories(.)

@@ -1,26 +1,26 @@
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO cjlin1/liblinear
-    REF v221
-    SHA512 abf21f9030e67886d88a95ad1699e566f8b67bb3bd23253f1f656460911f92a5c3c184fe127390d6100bbf9970cf7a246ef3611b0788907c35a33286228f1753
+    REF 60f1adf6f35d6f3e031c334b33dfe8399d6f8a9d #v243
+    SHA512 0f88f8dd768313d0a9b3bb82e7b878d7173ea43ef609e993dc79e94398897373faf2688249b17111e2b6e06e78e26a50570a1b746dc4e73fb7416ccc24936c66
     HEAD_REF master
 )
 
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt" DESTINATION "${SOURCE_PATH}")
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS_DEBUG
         -DDISABLE_INSTALL_HEADERS=ON
         -DDISABLE_INSTALL_TOOLS=ON
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 vcpkg_copy_pdbs()
-vcpkg_copy_tool_dependencies(${CURRENT_PACKAGES_DIR}/tools/liblinear)
 
-file(INSTALL ${SOURCE_PATH}/COPYRIGHT DESTINATION ${CURRENT_PACKAGES_DIR}/share/liblinear RENAME copyright)
-file(INSTALL ${SOURCE_PATH}/README DESTINATION ${CURRENT_PACKAGES_DIR}/share/liblinear)
+if(NOT DISABLE_INSTALL_TOOLS)
+    vcpkg_copy_tool_dependencies("${CURRENT_PACKAGES_DIR}/tools/liblinear")
+endif()
+
+file(INSTALL "${SOURCE_PATH}/COPYRIGHT" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
+file(INSTALL "${SOURCE_PATH}/README" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")

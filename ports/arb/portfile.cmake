@@ -1,32 +1,25 @@
-if (VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    message(STATUS "Warning: Dynamic building not supported yet. Building static.")
-    set(VCPKG_LIBRARY_LINKAGE static)
-endif()
-
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO fredrik-johansson/arb
-    REF 2.11.1
-    SHA512 7a014da5208b55f20c7a3cd3eb51070b09ae107b04cbbd6329925780c2ab4d7c38e1fb3619f21456fa806939818370fcae921f59eb013661b6bdd3d0971e3353
+    REF e3a633dcc1adafeb7ca9648669f2b1fa2f433ee1 # 2.21.1
+    SHA512 af864ea4f849d12dbaadec8cda7e6b1a7d349b7aa776966ec7f61ad7a5186dc3f280512218bcff28901e2d55d6c976525746e6de13925a9942ed947ac2253af6
     HEAD_REF master
+    PATCHES fix-build-error.patch
 )
 
-file(REMOVE ${SOURCE_PATH}/CMakeLists.txt)
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
+string(COMPARE EQUAL "${VCPKG_CRT_LINKAGE}" "static" MSVC_USE_MT)
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DMSVC_USE_MT=${MSVC_USE_MT}
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 vcpkg_copy_pdbs()
 
+# Remove duplicate headers
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
 
 # Handle copyright
-file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/arb RENAME copyright)
-
-# Remove duplicate headers
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

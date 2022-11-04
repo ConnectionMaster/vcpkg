@@ -1,24 +1,27 @@
-include(vcpkg_common_functions)
+if (VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
+  message("unicorn-lib is a static library, now build with static.")
+  set(VCPKG_LIBRARY_LINKAGE static)
+endif()
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO CaptainCrowbar/unicorn-lib
-    REF e5e6615ce4297a8b385884c21c1b78a6515cb766
-    SHA512 bdffd177d106882f1dcb59ac9dcecb985a8b6f9cec8dc44ff1eea3201bed1258e760a964163fed3514aa661a4be4bd92a0c437d769dbdffa04693a870ecf355c
+    REF 44e975ffc8dcd8dedbe01a8cbe7812e351f3f74f # 2022-01-24
+    SHA512 b22264420174c950ca8025e861366118d79a53edce9297d84af9511e255af5971c3719f0b464f4a4886848edea7c2ba4ae32ce9abab135628d64adbde5fa7b0d
     HEAD_REF master
 )
 
 file(COPY ${CURRENT_PORT_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS_DEBUG
         -DUNICORN_LIB_SKIP_HEADERS=ON
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 vcpkg_copy_pdbs()
 
-# Handle copyright
-file(INSTALL ${SOURCE_PATH}/LICENSE.TXT DESTINATION ${CURRENT_PACKAGES_DIR}/share/unicorn-lib RENAME copyright)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+
+file(INSTALL "${SOURCE_PATH}/LICENSE.txt" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

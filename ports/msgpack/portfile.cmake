@@ -1,13 +1,14 @@
-include(vcpkg_common_functions)
+if (EXISTS ${CURRENT_INSTALLED_DIR}/include/msgpack/pack.h)
+    message(FATAL_ERROR "Cannot install ${PORT} when rest-rpc is already installed, please remove rest-rpc using \"./vcpkg remove rest-rpc:${TARGET_TRIPLET}\"")
+endif()
+
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO msgpack/msgpack-c
-    REF cpp-3.1.1
-    SHA512 2d1607f482160d8860b07d7597af760bfefcb3afa4e82602df43487d15950ab235e7efeabd7e08996807935de71d4dcdab424c91bff806279419db2ec9500227
-    HEAD_REF master)
-
-vcpkg_apply_patches(SOURCE_PATH ${SOURCE_PATH}
-    PATCHES ${CMAKE_CURRENT_LIST_DIR}/add-static-lib-option.patch)
+    REF cpp-3.3.0
+    SHA512 33ed87b23d776cadcc230666e6435088e402c5813e7e4dce5ce79c8c3aceba5a36db8f395278042c6ac44c474b33018ff1635889d8b20bc41c5f6f1d1c963cae
+    HEAD_REF master
+)
 
 if(VCPKG_LIBRARY_LINKAGE STREQUAL static)
     set(MSGPACK_ENABLE_SHARED OFF)
@@ -34,3 +35,5 @@ file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
 
 file(COPY ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/msgpack)
 file(RENAME ${CURRENT_PACKAGES_DIR}/share/msgpack/COPYING ${CURRENT_PACKAGES_DIR}/share/msgpack/copyright)
+
+vcpkg_fixup_pkgconfig()

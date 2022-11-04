@@ -1,35 +1,40 @@
-include(vcpkg_common_functions)
-
 set(VCPKG_POLICY_EMPTY_PACKAGE enabled)
 
-if(NOT VCPKG_TARGET_ARCHITECTURE STREQUAL "x64" AND NOT VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
-    return()
-elseif(CMAKE_HOST_WIN32 AND VCPKG_CMAKE_SYSTEM_NAME AND NOT VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
+if(CMAKE_HOST_WIN32 AND VCPKG_CMAKE_SYSTEM_NAME AND NOT VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore" AND NOT VCPKG_CMAKE_SYSTEM_NAME STREQUAL "MinGW")
     return()
 endif()
+
+set(BOOST_VERSION 1.80.0)
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO boostorg/build
-    REF boost-1.69.0
-    SHA512 e8d89e75c83a08bab29f52b5100fccf1d2ddf492a532ae4cb8121a5f49819aebb8157d1a1fd7d514bd8a0fe444e5ebb1103b10c8579d5c234ab81110d9c334a8
+    REF boost-${BOOST_VERSION}
+    SHA512 11ac21b27c5c656951784734c6642a2d4efa185e074ec48561f2800203b639d4a628fec6d356bb733494889141327a7ac730ce127449bfc7d509d5d213216995
     HEAD_REF master
+    PATCHES
+        0002-fix-get-version.patch
 )
 
 vcpkg_download_distfile(ARCHIVE
-    URLS "https://raw.githubusercontent.com/boostorg/boost/boost-1.69.0/LICENSE_1_0.txt"
+    URLS "https://raw.githubusercontent.com/boostorg/boost/boost-${BOOST_VERSION}/LICENSE_1_0.txt"
     FILENAME "boost_LICENSE_1_0.txt"
     SHA512 d6078467835dba8932314c1c1e945569a64b065474d7aced27c9a7acc391d52e9f234138ed9f1aa9cd576f25f12f557e0b733c14891d42c16ecdc4a7bd4d60b8
 )
 
 vcpkg_download_distfile(BOOSTCPP_ARCHIVE
-    URLS "https://raw.githubusercontent.com/boostorg/boost/boost-1.69.0/boostcpp.jam"
-    FILENAME "boost-1.69.0-boostcpp.jam"
-    SHA512 1d05142f33b86a342674513cd5890b78601b0b3824540588f2c9e4c1fea43fadaa94f4a99495614445d3930861470fbfb8ad8c94b8bddf6a24ee65661a9bddc9
+    URLS "https://raw.githubusercontent.com/boostorg/boost/boost-${BOOST_VERSION}/boostcpp.jam"
+    FILENAME "boost-${BOOST_VERSION}-boostcpp.jam"
+    SHA512 0daa0dd315f7e426e7b9ada9cc4dad03da2eb257456e551de3fb3b2a8244f0117ed41d9d1ff77b5a3eee7a3c5fb466d345b9bb2af46004fc630209043d4862e3
 )
 
+# https://github.com/boostorg/boost/pull/206
+# do not add version suffix for android
+file(READ "${BOOSTCPP_ARCHIVE}" _contents)
+string(REPLACE "aix &&" "aix android &&" _contents "${_contents}")
+file(WRITE "${SOURCE_PATH}/boostcpp.jam" "${_contents}")
+
 file(INSTALL ${ARCHIVE} DESTINATION ${CURRENT_PACKAGES_DIR}/share/boost-build RENAME copyright)
-file(INSTALL ${BOOSTCPP_ARCHIVE} DESTINATION ${CURRENT_PACKAGES_DIR}/tools/boost-build RENAME boostcpp.jam)
 
 # This fixes the lib path to use desktop libs instead of uwp -- TODO: improve this with better "host" compilation
 string(REPLACE "\\store\\;" "\\;" LIB "$ENV{LIB}")
@@ -50,8 +55,13 @@ file(WRITE "${CURRENT_PACKAGES_DIR}/tools/boost-build/src/tools/msvc.jam" "${_co
 
 message(STATUS "Bootstrapping...")
 if(CMAKE_HOST_WIN32)
+    if(VCPKG_TARGET_IS_MINGW)
+        set(TOOLSET mingw)
+    else()
+        set(TOOLSET msvc)
+    endif()
     vcpkg_execute_required_process(
-        COMMAND "${CURRENT_PACKAGES_DIR}/tools/boost-build/bootstrap.bat" msvc
+        COMMAND "${CURRENT_PACKAGES_DIR}/tools/boost-build/bootstrap.bat" ${TOOLSET}
         WORKING_DIRECTORY ${CURRENT_PACKAGES_DIR}/tools/boost-build
         LOGNAME bootstrap-${TARGET_TRIPLET}
     )

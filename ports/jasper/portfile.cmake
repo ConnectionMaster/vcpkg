@@ -1,45 +1,42 @@
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO mdadams/jasper
-    REF version-2.0.14
-    SHA512 6b270cb1eb55f777f30016f3258e5e2297627e7d086334814c308464f5a4552c23241b0fdbc81ea715a6f4746294657f96c1cb6ceb320629ce57db7e81d84940
-    HEAD_REF master)
-
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}
-    PATCHES
-        ${CMAKE_CURRENT_LIST_DIR}/jasper-fix-uwp.patch
-        ${CMAKE_CURRENT_LIST_DIR}/opengl-not-required.patch
+    REF fe00207dc10db1d7cc6f2757961c5c6bdfd10973 # version-2.0.33
+    SHA512 887bb8e6096b41d5b61970d70b0e7b9cc1c31dd63467386aa35003c146d200bbae9ad46825a3313aeed403ac6fb26d504f489386cbc7ca364d95deeb5a94af46
+    HEAD_REF master
 )
 
-if(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    set(JAS_ENABLE_SHARED ON)
-else()
-    set(JAS_ENABLE_SHARED OFF)
+if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
+    set(VCPKG_CXX_FLAGS "/D_CRT_DECLARE_NONSTDC_NAMES ${VCPKG_CXX_FLAGS}")
+    set(VCPKG_C_FLAGS "/D_CRT_DECLARE_NONSTDC_NAMES ${VCPKG_C_FLAGS}")
 endif()
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" JAS_ENABLE_SHARED)
+
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        opengl    JAS_ENABLE_OPENGL        
+)
+
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
         -DJAS_ENABLE_AUTOMATIC_DEPENDENCIES=OFF
         -DJAS_ENABLE_LIBJPEG=ON
-        -DJAS_ENABLE_OPENGL=OFF # not needed for the library
+        -DJAS_ENABLE_OPENGL=${JAS_ENABLE_OPENGL}
         -DJAS_ENABLE_DOC=OFF
         -DJAS_ENABLE_PROGRAMS=OFF
         -DJAS_ENABLE_SHARED=${JAS_ENABLE_SHARED}
+    OPTIONS_DEBUG
+        -DCMAKE_DEBUG_POSTFIX=d # Due to CMakes FindJasper
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 vcpkg_copy_pdbs()
+vcpkg_fixup_pkgconfig()
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/share)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/lib/pkgconfig)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/share)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/share")
 
-file(COPY ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/jasper)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/jasper/LICENSE ${CURRENT_PACKAGES_DIR}/share/jasper/copyright)
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

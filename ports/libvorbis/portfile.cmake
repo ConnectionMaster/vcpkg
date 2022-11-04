@@ -1,41 +1,25 @@
-include(vcpkg_common_functions)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO xiph/vorbis
-    REF 9eadeccdc4247127d91ac70555074239f5ce3529
-    SHA512 26d6826eba57fd47ebf426ba5a0c961c87ff62e2bb4185190e4985de9ac49aa493f77a1bd01d3d0757eb89a8494ba7de3a506f76bf5c8942ac1de3f75746a301
+    REF v1.3.7
+    SHA512 bfb6f5dbfd49ed38b2b08b3667c06d02e68f649068a050f21a3cc7e1e56b27afd546aaa3199c4f6448f03f6e66a82f9a9dc2241c826d3d1d4acbd38339b9e9fb
     HEAD_REF master
     PATCHES
         0001-Dont-export-vorbisenc-functions.patch
-        0002-Allow-deprecated-functions.patch
+        0002-Fixup-pkgconfig-libs.patch
+        0003-def-mingw-compat.patch
 )
 
-file(TO_NATIVE_PATH "${CURRENT_INSTALLED_DIR}/include" OGG_INCLUDE)
-foreach(LIBNAME ogg.lib libogg.a libogg.dylib libogg.so)
-    if(EXISTS "${CURRENT_INSTALLED_DIR}/lib/${LIBNAME}" OR EXISTS "${CURRENT_INSTALLED_DIR}/debug/lib/${LIBNAME}")
-        file(TO_NATIVE_PATH "${CURRENT_INSTALLED_DIR}/lib/${LIBNAME}" OGG_LIB_REL)
-        file(TO_NATIVE_PATH "${CURRENT_INSTALLED_DIR}/debug/lib/${LIBNAME}" OGG_LIB_DBG)
-        break()
-    endif()
-endforeach()
-
-if(NOT OGG_LIB_REL)
-    message(FATAL_ERROR "Could not find libraries for dependency libogg!")
-endif()
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
-    OPTIONS -DOGG_INCLUDE_DIRS=${OGG_INCLUDE}
-    OPTIONS_RELEASE -DOGG_LIBRARIES=${OGG_LIB_REL}
-    OPTIONS_DEBUG -DOGG_LIBRARIES=${OGG_LIB_DBG}
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
 )
 
-vcpkg_install_cmake()
-
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-
-# Handle copyright
-configure_file(${SOURCE_PATH}/COPYING ${CURRENT_PACKAGES_DIR}/share/libvorbis/copyright COPYONLY)
-
+vcpkg_cmake_install()
+vcpkg_cmake_config_fixup(PACKAGE_NAME Vorbis CONFIG_PATH "lib/cmake/Vorbis")
+vcpkg_fixup_pkgconfig()
 vcpkg_copy_pdbs()
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+
+file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

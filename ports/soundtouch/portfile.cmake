@@ -1,39 +1,35 @@
-include(vcpkg_common_functions)
-
-# NOTE: SoundTouch has a static c++ version too, but entirely different headers, api, etc
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    message(STATUS "Warning: Static building not supported. Building dynamic.")
-    set(VCPKG_LIBRARY_LINKAGE dynamic)
-endif()
-
-if(VCPKG_CRT_LINKAGE STREQUAL "static")
-    message(FATAL_ERROR "Refusing to build DLL with static CRT linkage.")
-endif()
-
-if(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-    message(FATAL_ERROR "WindowsStore not supported")
-endif()
-
-set(VERSION 2.0.0)
-set(SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/soundtouch)
-
-vcpkg_download_distfile(ARCHIVE
-    URLS "https://www.surina.net/soundtouch/soundtouch-${VERSION}.zip"
-    FILENAME "soundtouch-${VERSION}.zip"
-    SHA512 50ef36b6cd21c16e235b908c5518e29b159b11f658a014c47fe767d3d8acebaefefec0ce253b4ed322cbd26387c69c0ed464ddace0c098e61d56d55c198117a5
-)
-vcpkg_extract_source_archive(${ARCHIVE})
-
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    GITHUB_HOST https://codeberg.org
+    REPO soundtouch/soundtouch
+    REF 2.3.1
+    SHA512 c9d110b06cafb79968c94c4d206360b9ea9673d63eaf1470b097a39acf18b5b9cd53759f2656ff8963c6eee6a36fecdf1ea9aa7dc014fbf8bbee0dcfb8e4e438
+    HEAD_REF master
 )
 
-vcpkg_install_cmake()
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+  FEATURES
+    soundstretch SOUNDSTRETCH
+    soundtouchdll SOUNDTOUCH_DLL
+)
 
-file(INSTALL ${SOURCE_PATH}/source/SoundTouchDLL/SoundTouchDLL.h DESTINATION ${CURRENT_PACKAGES_DIR}/include)
+if(SOUNDTOUCH_DLL)
+  vcpkg_check_linkage(ONLY_DYNAMIC_LIBRARY)
+endif()
 
-file(COPY ${SOURCE_PATH}/COPYING.TXT DESTINATION ${CURRENT_PACKAGES_DIR}/share/soundtouch)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/soundtouch/COPYING.TXT ${CURRENT_PACKAGES_DIR}/share/soundtouch/copyright)
+vcpkg_cmake_configure(
+  SOURCE_PATH "${SOURCE_PATH}"
+  OPTIONS ${FEATURE_OPTIONS}
+)
+vcpkg_cmake_install()
+
+vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/SoundTouch)
+vcpkg_fixup_pkgconfig()
+vcpkg_copy_pdbs()
+
+if(SOUNDSTRETCH)
+  vcpkg_copy_tools(TOOL_NAMES soundstretch AUTO_CLEAN)
+endif()
+
+file(INSTALL "${SOURCE_PATH}/COPYING.TXT" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")

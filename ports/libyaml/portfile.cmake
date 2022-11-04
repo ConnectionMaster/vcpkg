@@ -1,23 +1,33 @@
-include(vcpkg_common_functions)
+if (WIN32)
+    set(PATCHES fix-POSIX_name.patch)
+endif()
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO yaml/libyaml
-    REF 0.2.1
-    SHA512 8b91738183a6d81c2c0381b4279cff9d8f811dac643ce5e08aa869058f5653ad8a2d9d8f9e563b26ad75b617b80b10ccb32753984a50ed684529a90bdd248bff
+    REF 2c891fc7a770e8ba2fec34fc6b545c672beb37e6 # 0.2.5
+    SHA512 7cdde7b48c937777b851747f7e0b9a74cb7da30173e09305dad931ef83c3fcee3e125e721166690fe6a0987ba897564500530e5518e4b66b1c9b1db8900bf320
     HEAD_REF master
-    PATCHES 0001-fix-version.patch
+    PATCHES
+        ${PATCHES}
+        export-pkgconfig.patch
 )
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DBUILD_TESTING=OFF
+        -DINSTALL_CMAKE_DIR=share/yaml
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include ${CURRENT_PACKAGES_DIR}/include/config.h)
+vcpkg_copy_pdbs()
 
-vcpkg_fixup_cmake_targets(CONFIG_PATH cmake)
+vcpkg_cmake_config_fixup(PACKAGE_NAME yaml CONFIG_PATH share/yaml)
 
-configure_file(${SOURCE_PATH}/LICENSE ${CURRENT_PACKAGES_DIR}/share/libyaml/copyright COPYONLY)
+vcpkg_fixup_pkgconfig()
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include" "${CURRENT_PACKAGES_DIR}/include/config.h" "${CURRENT_PACKAGES_DIR}/debug/share")
+
+configure_file("${SOURCE_PATH}/License" "${CURRENT_PACKAGES_DIR}/share/${PORT}/copyright" COPYONLY)

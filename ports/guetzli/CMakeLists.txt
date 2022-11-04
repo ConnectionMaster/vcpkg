@@ -5,10 +5,6 @@ if(MSVC)
   add_compile_options(/W3 /wd4005 /wd4996 /wd4018 -D_CRT_SECURE_NO_WARNINGS -DNOMINMAX)
 endif()
 
-if(BUILD_SHARED_LIBS)
-  set(CMAKE_WINDOWS_EXPORT_ALL_SYMBOLS ON)
-endif()
-
 find_path(butteraugli_include butteraugli/butteraugli.h)
 find_library(butteraugli_library NAMES butteraugli_lib)
 find_package(PNG REQUIRED)
@@ -20,6 +16,8 @@ file(GLOB guetzli_includes "guetzli/*.h")
 list(REMOVE_ITEM guetzli_srcs "guetzli/guetzli.cc")
 
 add_library(guetzli_lib ${guetzli_srcs})
+
+target_compile_features(guetzli_lib PUBLIC cxx_std_11)
 
 add_executable(guetzli guetzli/guetzli.cc)
 

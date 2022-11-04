@@ -1,21 +1,55 @@
-include(vcpkg_common_functions)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO gdraheim/zziplib
-    REF v0.13.69
-    SHA512 ade026289737f43ca92a8746818d87dd7618d473dbce159546ce9071c9e4cbe164a6b1c9efff16efb7aa0327b2ec6b34f3256c6bda19cd6e325703fffc810ef0
+    REF v0.13.72
+    SHA512 4bb089e74813c6fac9657cd96e44e4a6469bf86aba3980d885c4573e8db45e74fd07bbdfcec9f36297c72227c8c0b2c37dab1bc4326cef8529960e482fe501c8
+    PATCHES
+        no-release-postfix.patch
+        export-targets.patch
 )
 
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
+string(COMPARE EQUAL VCPKG_CRT_LINKAGE "static" MSVC_STATIC_RUNTIME)
+string(COMPARE EQUAL VCPKG_LIBRARY_LINKAGE "static" BUILD_STATIC_LIBS)
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        "-DCMAKE_PROJECT_INCLUDE=${CMAKE_CURRENT_LIST_DIR}/cmake-project-include.cmake"
+        -DBUILD_STATIC_LIBS=${BUILD_STATIC_LIBS}
+        -DMSVC_STATIC_RUNTIME=${MSVC_STATIC_RUNTIME}
+        -DZZIPMMAPPED=OFF
+        -DZZIPFSEEKO=OFF
+        -DZZIPWRAP=OFF
+        -DZZIPSDL=OFF
+        -DZZIPBINS=OFF
+        -DZZIPTEST=OFF
+        -DZZIPDOCS=OFF
+)
+vcpkg_cmake_install()
+
+vcpkg_cmake_config_fixup(PACKAGE_NAME unofficial-zziplib)
+
+file(REMOVE_RECURSE
+    "${CURRENT_PACKAGES_DIR}/debug/include"
+    "${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig/zzipfseeko.pc"
+    "${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig/zzipmmapped.pc"
+    "${CURRENT_PACKAGES_DIR}/lib/pkgconfig/zzipfseeko.pc"
+    "${CURRENT_PACKAGES_DIR}/lib/pkgconfig/zzipmmapped.pc"
 )
 
-vcpkg_install_cmake()
+vcpkg_fixup_pkgconfig()
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
+file(READ "${SOURCE_PATH}/docs/COPYING.LIB" lgpl)
+file(READ "${SOURCE_PATH}/docs/COPYING.MPL" mpl)
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/${PORT}/copyright"
+"${PORT} is shipping under a dual MPL / LGPL license where each of them
+is separate and restrictions apply alternatively.
 
-# Handle copyright
-file(COPY ${SOURCE_PATH}/COPYING.LIB DESTINATION ${CURRENT_PACKAGES_DIR}/share/zziplib)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/zziplib/COPYING.LIB ${CURRENT_PACKAGES_DIR}/share/zziplib/copyright)
+---
+
+${lgpl}
+
+---
+
+${mpl}
+")

@@ -1,5 +1,3 @@
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO edrosten/fast-C-src
@@ -17,6 +15,7 @@ DESTINATION ${SOURCE_PATH}
 
 vcpkg_configure_cmake(
     SOURCE_PATH ${SOURCE_PATH}
+    PREFER_NINJA
     OPTIONS_DEBUG
         -DDISABLE_INSTALL_HEADERS=ON
 )

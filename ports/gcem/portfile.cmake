@@ -1,24 +1,21 @@
-include(vcpkg_common_functions)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO kthohr/gcem
-    REF v1.8.1
-    SHA512 dd82a917822ffdfb3f224599340d2a0499e47db8d469d9febf3d37cd796fae3c8186a4fc05cc727d3ef82655359166caafbb5ddee3b79ba7becf1a53cce20e4a
+    REF v1.14.1
+    SHA512 c4d6d50b541d71552ef5c3467bc2abe448a08627964c612abcfacc381b0f07399bdd03643e0914ad3c89116c3eae37ed96ee2cfce35d7ec47e6c0f53bab91f57
     HEAD_REF master
 )
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 
-vcpkg_fixup_cmake_targets(CONFIG_PATH lib/cmake/gcem)
+vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/gcem)
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/lib)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/lib")
 
 # Handle copyright
-file(COPY ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/gcem)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/gcem/LICENSE ${CURRENT_PACKAGES_DIR}/share/gcem/copyright)
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

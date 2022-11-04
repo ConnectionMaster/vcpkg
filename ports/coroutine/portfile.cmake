@@ -1,61 +1,33 @@
-include(vcpkg_common_functions)
-
-if(${VCPKG_TARGET_ARCHITECTURE} MATCHES x86)
-    message(FATAL_ERROR "This library doesn't support x86 arch. Please use x64 instead. If it is critical, create an issue at the repo: github.com/luncliff/coroutine")
+if(VCPKG_TARGET_IS_LINUX)
+    message("Warning: `coroutine` requires libc++ and Clang or GCC 10+ on Linux")
 endif()
 
-# changed to 1.4.1
-set(VERSION_1_4_COMMIT 8399236a4adf1cb49ef51133fb887027e3d77141)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO            luncliff/coroutine
-    REF             ${VERSION_1_4_COMMIT}
-    SHA512          35adf0aa3a923b869e02d1e33987f6c9922f90918e84feaf5a41e46334b7555db75f55c6dd797f74112010ef5e682ee6f5fbf58be84af88a8f8f084f3d6dac05
+    REF             1.5.0
+    SHA512          61b91fdc641b6905b884e99c5bf193ec2cf6962144ab3baafdb9432115757d96f3797f116b30356f0d21417b23082bc908f75042721caeab3329c4910b654594
     HEAD_REF        master
+    PATCHES
+        fix-errorC7651.patch
+        add-noexcept-to-frame.patch
+        gsl-4_0_0.patch
 )
-
-# package: 'ms-gsl'
-set(GSL_INCLUDE_DIR ${CURRENT_INSTALLED_DIR}/include 
-    CACHE PATH "path to include C++ core guideline support library" FORCE)
-message(STATUS "Using ms-gsl at ${GSL_INCLUDE_DIR}")
-
-set(DLL_LINKAGE false)
-if(${VCPKG_LIBRARY_LINKAGE} MATCHES dynamic)
-    message(STATUS "Using DLL linkage")
-    set(DLL_LINKAGE true)
-endif()
 
 vcpkg_configure_cmake(
     SOURCE_PATH ${SOURCE_PATH}
     PREFER_NINJA
     OPTIONS
-        -DGSL_INCLUDE_DIR=${GSL_INCLUDE_DIR}
-        -DTEST_DISABLED=True
-        -DBUILD_SHARED_LIBS=${DLL_LINKAGE}
+        -DGSL_INCLUDE_DIR=${CURRENT_INSTALLED_DIR}/include
+        -DBUILD_TESTING=False
 )
-
 vcpkg_install_cmake()
+vcpkg_fixup_cmake_targets()
 
-file(
-    INSTALL     ${SOURCE_PATH}/LICENSE
-    DESTINATION ${CURRENT_PACKAGES_DIR}/share/coroutine
-    RENAME      copyright
+file(INSTALL        ${SOURCE_PATH}/LICENSE
+     DESTINATION    ${CURRENT_PACKAGES_DIR}/share/${PORT}
+     RENAME         copyright
 )
+vcpkg_copy_pdbs()
 
-if(WIN32 AND DLL_LINKAGE)
-    file(INSTALL        ${CURRENT_PACKAGES_DIR}/debug/lib/coroutine.dll
-         DESTINATION    ${CURRENT_PACKAGES_DIR}/debug/bin
-    )
-    file(REMOVE         ${CURRENT_PACKAGES_DIR}/debug/lib/coroutine.dll)
-
-    file(INSTALL        ${CURRENT_PACKAGES_DIR}/lib/coroutine.dll
-         DESTINATION    ${CURRENT_PACKAGES_DIR}/bin
-    )
-    file(REMOVE         ${CURRENT_PACKAGES_DIR}/lib/coroutine.dll)
-endif()
-# removed duplicates in debug
 file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/share)
-
-# unset used variables
-unset(DLL_LINKAGE)

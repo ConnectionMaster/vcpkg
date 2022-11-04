@@ -1,33 +1,22 @@
 # header-only library
 
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
-    REPO QuantStack/xtensor
-    REF 0.19.3
-    SHA512 e3b0085115252441ef4ddf21ef48ca18c3872c24d7f94d2f7533fa8f4b00dff0b5613946296f9dd4d7db3381ff43b41dd2f1ae3857a409fabd439eade431aba2
+    REPO xtensor-stack/xtensor
+    REF 825c0fd8a465049c06ad89fa3911b342dbffcabf # 0.24.0
+    SHA512 18b030efb88255108f3e2a0f5da9f082c32f2b637cb83fcabd5b579b0cff67b503d378037088c535497da09c00a5430ca87e737235b3b0b449da183925d99e68
     HEAD_REF master
 )
 
-if("xsimd" IN_LIST FEATURES)
-    set(XTENSOR_USE_XSIMD ON)
-else()
-    set(XTENSOR_USE_XSIMD OFF)
-endif()
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        xsimd XTENSOR_USE_XSIMD
+        tbb XTENSOR_USE_TBB
+)
 
-if("tbb" IN_LIST FEATURES)
-    set(XTENSOR_USE_TBB ON)
-else()
-    set(XTENSOR_USE_TBB OFF)
-endif()
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
-        -DXTENSOR_USE_XSIMD=${XTENSOR_USE_XSIMD}
-        -DXTENSOR_USE_TBB=${XTENSOR_USE_TBB}
         -DXTENSOR_ENABLE_ASSERT=OFF
         -DXTENSOR_CHECK_DIMENSION=OFF
         -DBUILD_TESTS=OFF
@@ -36,16 +25,13 @@ vcpkg_configure_cmake(
         -DDOWNLOAD_GBENCHMARK=OFF
         -DDEFAULT_COLUMN_MAJOR=OFF
         -DDISABLE_VS2017=OFF
+        ${FEATURE_OPTIONS}
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 
-vcpkg_fixup_cmake_targets(CONFIG_PATH lib/cmake/${PORT})
+vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/${PORT})
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug ${CURRENT_PACKAGES_DIR}/lib)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug" "${CURRENT_PACKAGES_DIR}/lib")
 
-# Handle copyright
-configure_file(${SOURCE_PATH}/LICENSE ${CURRENT_PACKAGES_DIR}/share/${PORT}/copyright COPYONLY)
-
-# CMake integration test
-vcpkg_test_cmake(PACKAGE_NAME ${PORT})
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

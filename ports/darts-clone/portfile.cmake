@@ -1,4 +1,3 @@
-include(vcpkg_common_functions)
 vcpkg_check_linkage(
   ONLY_STATIC_LIBRARY
 )
@@ -22,5 +21,7 @@ vcpkg_configure_cmake(
 
 vcpkg_install_cmake()
 vcpkg_copy_pdbs()
+
+file(REMOVE ${CURRENT_PACKAGES_DIR}/include/Makefile.am)
 
 file(INSTALL ${SOURCE_PATH}/COPYING.md DESTINATION ${CURRENT_PACKAGES_DIR}/share/darts-clone RENAME copyright)

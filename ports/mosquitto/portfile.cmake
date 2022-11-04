@@ -1,57 +1,76 @@
-include(vcpkg_common_functions)
-
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    message("mosquitto only supports dynamic linkage")
-    set(VCPKG_LIBRARY_LINKAGE dynamic)
-endif()
-
-if(VCPKG_CRT_LINKAGE STREQUAL "static")
-    message(FATAL_ERROR "mosquitto does not support static CRT linkage")
-endif()
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO eclipse/mosquitto
-    REF v1.5
-    SHA512 f6a5c8e71d642ef931176fe428fb79353933facc2db226d9e55b87d4ff9bd6610a1bd05d71159e30c8afb1fda542d233630ae164770e652baa7ea51117211489
     HEAD_REF master
-)
-
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}
+    REF v2.0.14
+    SHA512 4b7066acd7d8ecb05fef6089997632381c34ce6631b7106afedf95b7f72d7280e45c9b2f8cce49349bf599520770ebbebb68ff71930bc44b615d177b4056a945
     PATCHES
-        "${CMAKE_CURRENT_LIST_DIR}/win64-cmake.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/output_folders-cmake.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/fix-dependence-pthreads.patch"
+        0002-win64-support.patch
+        0003-add-find_package-libwebsockets.patch
+        0004-support-static-build.patch
+        0005-websocket-shared-lib-name.patch
 )
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" STATIC_LINKAGE)
+
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
+        -DWITH_STATIC_LIBRARIES=${STATIC_LINKAGE}
         -DWITH_SRV=OFF
         -DWITH_WEBSOCKETS=ON
+        -DSTATIC_WEBSOCKETS=${STATIC_LINKAGE}
         -DWITH_TLS=ON
         -DWITH_TLS_PSK=ON
         -DWITH_THREADING=ON
-        -DDOCUMENTATION=OFF 
-    OPTIONS_RELEASE
-        -DENABLE_DEBUG=OFF
-    OPTIONS_DEBUG
-        -DENABLE_DEBUG=ON
+        -DDOCUMENTATION=OFF
+        -DWITH_PLUGINS=OFF
+        -DWITH_CJSON=OFF
+        -DWITH_CLIENTS=OFF
+        -DWITH_APPS=OFF
+        -DWITH_BROKER=OFF
+        -DWITH_BUNDLED_DEPS=OFF
+    MAYBE_UNUSED_VARIABLES
+        WITH_WEBSOCKETS
+        STATIC_WEBSOCKETS
 )
 
-vcpkg_install_cmake()
-
-# Remove debug/include
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-
-file(GLOB EXE ${CURRENT_PACKAGES_DIR}/bin/*.exe)
-file(GLOB DEBUG_EXE ${CURRENT_PACKAGES_DIR}/debug/bin/*.exe)
-file(REMOVE ${EXE})
-file(REMOVE ${DEBUG_EXE})
-
-file(INSTALL ${SOURCE_PATH}/LICENSE.txt DESTINATION ${CURRENT_PACKAGES_DIR}/share/mosquitto RENAME copyright)
-
-# Copy pdb
+vcpkg_cmake_install()
 vcpkg_copy_pdbs()
+
+vcpkg_fixup_pkgconfig()
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+
+if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/bin" "${CURRENT_PACKAGES_DIR}/debug/bin")
+
+    file(REMOVE "${CURRENT_PACKAGES_DIR}/lib/${VCPKG_TARGET_SHARED_LIBRARY_PREFIX}mosquitto${VCPKG_TARGET_SHARED_LIBRARY_SUFFIX}")
+    file(REMOVE "${CURRENT_PACKAGES_DIR}/lib/${VCPKG_TARGET_SHARED_LIBRARY_PREFIX}mosquittopp${VCPKG_TARGET_SHARED_LIBRARY_SUFFIX}")
+    file(REMOVE "${CURRENT_PACKAGES_DIR}/debug/lib/${VCPKG_TARGET_SHARED_LIBRARY_PREFIX}mosquitto${VCPKG_TARGET_SHARED_LIBRARY_SUFFIX}")
+    file(REMOVE "${CURRENT_PACKAGES_DIR}/debug/lib/${VCPKG_TARGET_SHARED_LIBRARY_PREFIX}mosquittopp${VCPKG_TARGET_SHARED_LIBRARY_SUFFIX}")
+
+    file(GLOB VERSIONED_LIBRARIES LIST_DIRECTORIES FALSE
+        "${CURRENT_PACKAGES_DIR}/lib/${VCPKG_TARGET_SHARED_LIBRARY_PREFIX}mosquitto${VCPKG_TARGET_SHARED_LIBRARY_SUFFIX}.*"
+        "${CURRENT_PACKAGES_DIR}/lib/${VCPKG_TARGET_SHARED_LIBRARY_PREFIX}mosquittopp${VCPKG_TARGET_SHARED_LIBRARY_SUFFIX}.*"
+        "${CURRENT_PACKAGES_DIR}/debug/lib/${VCPKG_TARGET_SHARED_LIBRARY_PREFIX}mosquitto${VCPKG_TARGET_SHARED_LIBRARY_SUFFIX}.*"
+        "${CURRENT_PACKAGES_DIR}/debug/lib/${VCPKG_TARGET_SHARED_LIBRARY_PREFIX}mosquittopp${VCPKG_TARGET_SHARED_LIBRARY_SUFFIX}.*"
+    )
+
+    if(NOT "x${VERSIONED_LIBRARIES}x" STREQUAL "xx")
+        file(REMOVE ${VERSIONED_LIBRARIES})
+    endif()
+
+    if(NOT "x${VCPKG_TARGET_IMPORT_LIBRARY_PREFIX}${VCPKG_TARGET_IMPORT_LIBRARY_SUFFIX}x" STREQUAL "xx")
+        file(REMOVE "${CURRENT_PACKAGES_DIR}/lib/${VCPKG_TARGET_IMPORT_LIBRARY_PREFIX}mosquitto${VCPKG_TARGET_IMPORT_LIBRARY_SUFFIX}")
+        file(REMOVE "${CURRENT_PACKAGES_DIR}/lib/${VCPKG_TARGET_IMPORT_LIBRARY_PREFIX}mosquittopp${VCPKG_TARGET_IMPORT_LIBRARY_SUFFIX}")
+        file(REMOVE "${CURRENT_PACKAGES_DIR}/debug/lib/${VCPKG_TARGET_IMPORT_LIBRARY_PREFIX}mosquitto${VCPKG_TARGET_IMPORT_LIBRARY_SUFFIX}")
+        file(REMOVE "${CURRENT_PACKAGES_DIR}/debug/lib/${VCPKG_TARGET_IMPORT_LIBRARY_PREFIX}mosquittopp${VCPKG_TARGET_IMPORT_LIBRARY_SUFFIX}")
+    endif()
+endif()
+
+configure_file(${CMAKE_CURRENT_LIST_DIR}/vcpkg-cmake-wrapper.cmake ${CURRENT_PACKAGES_DIR}/share/${PORT}/vcpkg-cmake-wrapper.cmake @ONLY)
+
+file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
+file(INSTALL "${SOURCE_PATH}/LICENSE.txt" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

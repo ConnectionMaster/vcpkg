@@ -1,26 +1,36 @@
-include(vcpkg_common_functions)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO libcheck/check
-    REF 0.12.0
-    SHA512 f7b6452b69f999a90e86a8582d980c0c1b74ba5629ee34455724463ba62bfe3501ad0415aa771170f5c638a7a253f123bf87cbef25aadc6569a7a3a4d10fce90
+    REF 11970a7e112dfe243a2e68773f014687df2900e8 # 0.15.2
+    SHA512 210c9617fa1c1ce16bef983b0e6cb587b1774c3f7ce27a53ca7799642dc7a14be8de567d69dc0e57845684c6f7991d772c73654f63c8755afda3b37a35c7156e
     HEAD_REF master
+    PATCHES fix-lib-path.patch
 )
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA # Disable this option if project cannot be built with Ninja
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DCHECK_ENABLE_TESTS=OFF
+        -DBUILD_TESTING=OFF
+        -DCHECK_ENABLE_GCOV=OFF
+        -DENABLE_MEMORY_LEAKING_TESTS=OFF
+        -DCHECK_ENABLE_TIMEOUT_TESTS=OFF
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 
-file(RENAME ${CURRENT_PACKAGES_DIR}/cmake/check.cmake ${CURRENT_PACKAGES_DIR}/cmake/check-config.cmake)
-vcpkg_fixup_cmake_targets(CONFIG_PATH cmake)
-
-# cleanup
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include ${CURRENT_PACKAGES_DIR}/debug/share)
-
-# Handle copyright
-file(INSTALL ${SOURCE_PATH}/COPYING.LESSER DESTINATION ${CURRENT_PACKAGES_DIR}/share/check RENAME copyright)
+vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/check)
 
 vcpkg_copy_pdbs()
+
+if(VCPKG_LIBRARY_LINKAGE STREQUAL static)
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/bin" "${CURRENT_PACKAGES_DIR}/debug/bin")
+endif()
+
+# cleanup
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include" "${CURRENT_PACKAGES_DIR}/debug/share")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/share/man")
+
+vcpkg_fixup_pkgconfig()
+
+file(INSTALL "${SOURCE_PATH}/COPYING.LESSER" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

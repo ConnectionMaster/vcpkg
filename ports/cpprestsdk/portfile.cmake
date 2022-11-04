@@ -1,52 +1,59 @@
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO Microsoft/cpprestsdk
-    REF v2.10.12
-    SHA512 a0839c11f71271464632095c1b91bd555220d1c87c4e7637d8424a51739e5abcd91e9257d1171d06470427ba48defd2be12bb34f5352c9590219b9f54292e3a8
+    REF 122d09549201da5383321d870bed45ecb9e168c5
+    SHA512 c9ded33d3c67880e2471e479a38b40a14a9ff45d241e928b6339eca697b06ad621846260eca47b6b1b8a2bc9ab7bf4fea8d3e8e795cd430d8839beb530e16dd7
     HEAD_REF master
+    PATCHES 
+        fix-find-openssl.patch
+        fix_narrowing.patch
 )
 
 set(OPTIONS)
-if(NOT VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
+if(NOT VCPKG_TARGET_IS_UWP)
     SET(WEBSOCKETPP_PATH "${CURRENT_INSTALLED_DIR}/share/websocketpp")
     list(APPEND OPTIONS
         -DWEBSOCKETPP_CONFIG=${WEBSOCKETPP_PATH}
         -DWEBSOCKETPP_CONFIG_VERSION=${WEBSOCKETPP_PATH})
 endif()
 
-set(CPPREST_EXCLUDE_WEBSOCKETS ON)
-if("websockets" IN_LIST FEATURES)
-    set(CPPREST_EXCLUDE_WEBSOCKETS OFF)
+vcpkg_check_features(
+    OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    INVERTED_FEATURES
+      brotli CPPREST_EXCLUDE_BROTLI
+      compression CPPREST_EXCLUDE_COMPRESSION
+      websockets CPPREST_EXCLUDE_WEBSOCKETS
+)
+
+if(VCPKG_TARGET_IS_UWP)
+    set(configure_opts WINDOWS_USE_MSBUILD)
 endif()
 
-set(CPPREST_EXCLUDE_BROTLI ON)
-if ("brotli" IN_LIST FEATURES)
-    set(CPPREST_EXCLUDE_BROTLI OFF)
-endif()
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}/Release
-    PREFER_NINJA
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}/Release"
+    ${configure_opts}
     OPTIONS
         ${OPTIONS}
+        ${FEATURE_OPTIONS}
         -DBUILD_TESTS=OFF
         -DBUILD_SAMPLES=OFF
-        -DCPPREST_EXCLUDE_WEBSOCKETS=${CPPREST_EXCLUDE_WEBSOCKETS}
         -DCPPREST_EXPORT_DIR=share/cpprestsdk
         -DWERROR=OFF
+        -DPKG_CONFIG_EXECUTABLE=FALSE
     OPTIONS_DEBUG
         -DCPPREST_INSTALL_HEADERS=OFF
 )
 
-vcpkg_install_cmake()
-
-vcpkg_fixup_cmake_targets(CONFIG_PATH lib/share/cpprestsdk)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/lib/share ${CURRENT_PACKAGES_DIR}/lib/share)
-
-file(INSTALL
-    ${SOURCE_PATH}/license.txt
-    DESTINATION ${CURRENT_PACKAGES_DIR}/share/cpprestsdk RENAME copyright)
+vcpkg_cmake_install()
 
 vcpkg_copy_pdbs()
+
+vcpkg_cmake_config_fixup(CONFIG_PATH "lib/share/${PORT}")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/lib/share" "${CURRENT_PACKAGES_DIR}/lib/share")
+
+if (VCPKG_LIBRARY_LINKAGE STREQUAL static)
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/cpprest/details/cpprest_compat.h"
+        "#ifdef _NO_ASYNCRTIMP" "#if 1")
+endif()
+
+file(INSTALL "${SOURCE_PATH}/license.txt" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

@@ -1,72 +1,66 @@
-# Common Ambient Variables:
-#   CURRENT_BUILDTREES_DIR    = ${VCPKG_ROOT_DIR}\buildtrees\${PORT}
-#   CURRENT_PACKAGES_DIR      = ${VCPKG_ROOT_DIR}\packages\${PORT}_${TARGET_TRIPLET}
-#   CURRENT_PORT_DIR          = ${VCPKG_ROOT_DIR}\ports\${PORT}
-#   PORT                      = current port name (zlib, etc)
-#   TARGET_TRIPLET            = current triplet (x86-windows, x64-windows-static, etc)
-#   VCPKG_CRT_LINKAGE         = C runtime linkage type (static, dynamic)
-#   VCPKG_LIBRARY_LINKAGE     = target library linkage type (static, dynamic)
-#   VCPKG_ROOT_DIR            = <C:\path\to\current\vcpkg>
-#   VCPKG_TARGET_ARCHITECTURE = target architecture (x64, x86, arm)
-#
+vcpkg_buildpath_length_warning(37)
 
-include(vcpkg_common_functions)
+#the port produces some empty dlls when building shared libraries, since some components do not export anything, breaking the internal build itself
+vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
-string(LENGTH "${CURRENT_BUILDTREES_DIR}" BUILDTREES_PATH_LENGTH)
-if(BUILDTREES_PATH_LENGTH GREATER 37 AND CMAKE_HOST_WIN32)
-    message(WARNING "Openmvg's buildsystem uses very long paths and may fail on your system.\n"
-        "We recommend moving vcpkg to a short path such as 'C:\\src\\vcpkg' or using the subst command."
-    )
+if("software" IN_LIST FEATURES AND VCPKG_CRT_LINKAGE STREQUAL static)
+    message(FATAL_ERROR "OpenMVG software currently cannot be built with static CRT linking. Please open an issue if you require this feature.")
 endif()
 
 vcpkg_from_github(
-    OUT_SOURCE_PATH SOURCE_PATH 
+    OUT_SOURCE_PATH SOURCE_PATH
     REPO openMVG/openMVG
-    REF v1.4
-    SHA512 949cf3680375c87b06db0f4713c846422c98d1979d49e9db65761f63f6f3212f0fcd8425f23c6112f04fbbb90b241638c2fd9329bb6b8b612c1d073aac55759a
+    REF d0fe73dd426ae4001631a51272cff71047522df9  # v2.0
+    SHA512 1d5c68971ad63ced46d8b9070bdacc1065b4ba950fe919e11f952a004def87d4d83a474d48aee714c21b12106d7d81187d3670d8a2e6daf2d3c5fceb008a5de3
+    PATCHES
+        build_fixes.patch
+        0001-eigen_3.4.0.patch
+        0002-eigen-3.4.patch
+        no-absolute-paths.patch
 )
 
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}
-    PATCHES ${CMAKE_CURRENT_LIST_DIR} fixcmake.patch)
-
-
-# remove some deps to prevent conflict
-file(REMOVE_RECURSE ${SOURCE_PATH}/src/third_party/ceres-solver)
-file(REMOVE_RECURSE ${SOURCE_PATH}/src/third_party/cxsparse)
-file(REMOVE_RECURSE ${SOURCE_PATH}/src/third_party/eigen)
-file(REMOVE_RECURSE ${SOURCE_PATH}/src/third_party/flann)
-file(REMOVE_RECURSE ${SOURCE_PATH}/src/third_party/jpeg)
-file(REMOVE_RECURSE ${SOURCE_PATH}/src/third_party/lemon)
-file(REMOVE_RECURSE ${SOURCE_PATH}/src/third_party/png)
-file(REMOVE_RECURSE ${SOURCE_PATH}/src/third_party/tiff)
-file(REMOVE_RECURSE ${SOURCE_PATH}/src/third_party/zlib)
-
-if(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    set(OpenMVG_BUILD_SHARED ON)
-else()
-    set(OpenMVG_BUILD_SHARED OFF)
+set(OpenMVG_USE_OPENMP OFF)
+if("openmp" IN_LIST FEATURES)
+    set(OpenMVG_USE_OPENMP ON)
 endif()
 
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        opencv OpenMVG_USE_OPENCV
+        opencv OpenMVG_USE_OCVSIFT
+        software OpenMVG_BUILD_SOFTWARES
+        software OpenMVG_BUILD_GUI_SOFTWARES
+)
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}/src
-    # PREFER_NINJA # Disable this option if project cannot be built with Ninja
-    # OPTIONS -DUSE_THIS_IN_ALL_BUILDS=1 -DUSE_THIS_TOO=2
-    OPTIONS
-        -DOpenMVG_BUILD_SHARED=${OpenMVG_BUILD_SHARED}
+# remove some deps to prevent conflict
+file(REMOVE_RECURSE ${SOURCE_PATH}/src/third_party/ceres-solver
+                    ${SOURCE_PATH}/src/third_party/cxsparse
+                    ${SOURCE_PATH}/src/third_party/eigen
+                    ${SOURCE_PATH}/src/third_party/flann
+                    ${SOURCE_PATH}/src/third_party/jpeg
+                    ${SOURCE_PATH}/src/third_party/lemon
+                    ${SOURCE_PATH}/src/third_party/png
+                    ${SOURCE_PATH}/src/third_party/tiff
+                    ${SOURCE_PATH}/src/third_party/zlib)
+
+# remove some cmake modules to force using our configs
+file(REMOVE_RECURSE ${SOURCE_PATH}/src/cmakeFindModules/FindEigen.cmake
+                    ${SOURCE_PATH}/src/cmakeFindModules/FindLemon.cmake
+                    ${SOURCE_PATH}/src/cmakeFindModules/FindFlann.cmake
+                    ${SOURCE_PATH}/src/cmakeFindModules/FindCoinUtils.cmake
+                    ${SOURCE_PATH}/src/cmakeFindModules/FindClp.cmake
+                    ${SOURCE_PATH}/src/cmakeFindModules/FindOsi.cmake)
+
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}/src"
+    OPTIONS ${FEATURE_OPTIONS}
+        -DOpenMVG_USE_OPENMP=${OpenMVG_USE_OPENMP}
+        -DOpenMVG_BUILD_SHARED=OFF
+        -DOpenMVG_BUILD_TESTS=OFF
         -DOpenMVG_BUILD_DOC=OFF
         -DOpenMVG_BUILD_EXAMPLES=OFF
-        -DOpenMVG_BUILD_SOFTWARES=OFF
-        -DOpenMVG_BUILD_GUI_SOFTWARES=OFF
-        # TODO, use packgeconfig.cmake file instead
-        -DEIGEN_INCLUDE_DIR_HINTS=${CURRENT_INSTALLED_DIR}/include/
-        -DCERES_DIR_HINTS=${CURRENT_INSTALLED_DIR}/ceres
-        -DFLANN_INCLUDE_DIR_HINTS=${CURRENT_INSTALLED_DIR}/flann
-        -DLEMON_INCLUDE_DIR_HINTS=${CURRENT_INSTALLED_DIR}/include/lemon
-        -DCOINUTILS_INCLUDE_DIR_HINTS=${CURRENT_INSTALLED_DIR}/include/coin
-        -DCLP_INCLUDE_DIR_HINTS=${CURRENT_INSTALLED_DIR}/include/coin
-        -DOSI_INCLUDE_DIR_HINTS=${CURRENT_INSTALLED_DIR}/include/coin
+        -DOpenMVG_BUILD_OPENGL_EXAMPLES=OFF
+        -DOpenMVG_BUILD_COVERAGE=OFF
         -DOpenMVG_USE_INTERNAL_CLP=OFF
         -DOpenMVG_USE_INTERNAL_COINUTILS=OFF
         -DOpenMVG_USE_INTERNAL_OSI=OFF
@@ -74,36 +68,107 @@ vcpkg_configure_cmake(
         -DOpenMVG_USE_INTERNAL_CEREAL=OFF
         -DOpenMVG_USE_INTERNAL_CERES=OFF
         -DOpenMVG_USE_INTERNAL_FLANN=OFF
-        -DTARGET_ARCHITECTURE=core # disable instruction like avx
-    # OPTIONS_RELEASE -DOPTIMIZE=1
-    OPTIONS_RELEASE
-        -DFLANN_LIBRARY=${CURRENT_INSTALLED_DIR}/lib/flann_cpp.lib
-    OPTIONS_DEBUG 
-        -DFLANN_LIBRARY=${CURRENT_INSTALLED_DIR}/debug/lib/flann_cpp-gd.lib
+        -DOpenMVG_USE_INTERNAL_LEMON=OFF
 )
 
-vcpkg_install_cmake()
-vcpkg_fixup_cmake_targets(CONFIG_PATH "share/openMVG/cmake")
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/include/openMVG/image/image_test)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/include/openMVG/exif/image_data)
-file(GLOB REMOVE_CMAKE ${CURRENT_PACKAGES_DIR}/lib/*.cmake)
-file(REMOVE_RECURSE ${REMOVE_CMAKE})
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/share)
+vcpkg_cmake_install()
+vcpkg_cmake_config_fixup(CONFIG_PATH share/openMVG/cmake)
+
+if (NOT VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "debug")
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include" "${CURRENT_PACKAGES_DIR}/debug/share")
+    file(REMOVE "${CURRENT_PACKAGES_DIR}/debug/lib/openMVG-targets.cmake" "${CURRENT_PACKAGES_DIR}/debug/lib/openMVG-targets-debug.cmake")
+endif()
+file(REMOVE "${CURRENT_PACKAGES_DIR}/lib/openMVG-targets.cmake" "${CURRENT_PACKAGES_DIR}/lib/openMVG-targets-release.cmake")
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/include/openMVG/image/image_test"
+                    "${CURRENT_PACKAGES_DIR}/include/openMVG/exif/image_data"
+                    "${CURRENT_PACKAGES_DIR}/include/openMVG_dependencies/nonFree/sift/vl")
+
 if(OpenMVG_BUILD_SHARED)
-    # release
-    file(GLOB DLL_FILES  ${CURRENT_PACKAGES_DIR}/lib/*.dll)
-    file(COPY ${DLL_FILES} DESTINATION ${CURRENT_PACKAGES_DIR}/bin)
-    file(REMOVE_RECURSE ${DLL_FILES})
-    # debug
-    file(GLOB DLL_FILES  ${CURRENT_PACKAGES_DIR}/debug/lib/*.dll)
-    file(COPY ${DLL_FILES} DESTINATION ${CURRENT_PACKAGES_DIR}/debug/bin)
-    file(REMOVE_RECURSE ${DLL_FILES})
+    if (NOT VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "release")
+        # release
+        file(GLOB DLL_FILES  "${CURRENT_PACKAGES_DIR}/lib/*.dll")
+        file(COPY "${DLL_FILES}" DESTINATION "${CURRENT_PACKAGES_DIR}/bin")
+        file(REMOVE_RECURSE "${DLL_FILES}")
+    endif()
+    if (NOT VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "debug")
+        # debug
+        file(GLOB DLL_FILES  "${CURRENT_PACKAGES_DIR}/debug/lib/*.dll")
+        file(COPY "${DLL_FILES}" DESTINATION "${CURRENT_PACKAGES_DIR}/debug/bin")
+        file(REMOVE_RECURSE "${DLL_FILES}")
+    endif()
 endif()
 vcpkg_copy_pdbs()
 
-# Handle copyright
-file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/openmvg RENAME copyright)
+if("software" IN_LIST FEATURES)
+    if(VCPKG_TARGET_IS_OSX)
+        vcpkg_copy_tools(TOOL_NAMES
+            openMVG_main_AlternativeVO.app
+            ui_openMVG_MatchesViewer.app
+        )
+        file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/bin/openMVG_main_AlternativeVO.app")
+        file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/bin/ui_openMVG_MatchesViewer.app")
+        file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/bin/openMVG_main_AlternativeVO.app")
+        file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/bin/ui_openMVG_MatchesViewer.app")
+    else()
+        vcpkg_copy_tools(AUTO_CLEAN TOOL_NAMES
+            openMVG_main_AlternativeVO
+            ui_openMVG_MatchesViewer
+        )
+    endif()
+    vcpkg_copy_tools(AUTO_CLEAN TOOL_NAMES
+        openMVG_main_ChangeLocalOrigin
+        openMVG_main_ColHarmonize
+        openMVG_main_ComputeClusters
+        openMVG_main_ComputeFeatures
+        openMVG_main_ComputeMatches
+        openMVG_main_ComputeSfM_DataColor
+        openMVG_main_ComputeStructureFromKnownPoses
+        openMVG_main_ConvertList
+        openMVG_main_ConvertSfM_DataFormat
+        openMVG_main_evalQuality
+        openMVG_main_ExportCameraFrustums
+        openMVG_main_exportKeypoints
+        openMVG_main_exportMatches
+        openMVG_main_exportTracks
+        openMVG_main_ExportUndistortedImages
+        openMVG_main_FrustumFiltering
+        openMVG_main_geodesy_registration_to_gps_position
+        openMVG_main_ListMatchingPairs
+        openMVG_main_MatchesToTracks
+        openMVG_main_openMVG2Agisoft
+        openMVG_main_openMVG2CMPMVS
+        openMVG_main_openMVG2Colmap
+        openMVG_main_openMVG2MESHLAB
+        openMVG_main_openMVG2MVE2
+        openMVG_main_openMVG2MVSTEXTURING
+        openMVG_main_openMVG2NVM
+        openMVG_main_openMVG2openMVS
+        openMVG_main_openMVG2PMVS
+        openMVG_main_openMVG2WebGL
+        openMVG_main_openMVGSpherical2Cubic
+        openMVG_main_PointsFiltering
+        openMVG_main_SfMInit_ImageListing
+        openMVG_main_SfMInit_ImageListingFromKnownPoses
+        openMVG_main_SfM_Localization
+        openMVG_main_SplitMatchFileIntoMatchFiles
+        ui_openMVG_control_points_registration
+        openMVG_main_GeometricFilter
+        openMVG_main_PairGenerator
+        openMVG_main_SfM
+    )
+    if("opencv" IN_LIST FEATURES)
+        vcpkg_copy_tools(AUTO_CLEAN TOOL_NAMES
+            openMVG_main_ComputeFeatures_OpenCV)
+    endif()
 
-# Post-build test for cmake libraries
-# vcpkg_test_cmake(PACKAGE_NAME openmvg)
+    file(COPY "${SOURCE_PATH}/src/openMVG/exif/sensor_width_database/sensor_width_camera_database.txt" DESTINATION "${CURRENT_PACKAGES_DIR}/tools/${PORT}")
+    set(OPENMVG_SOFTWARE_SFM_BUILD_DIR "${CURRENT_INSTALLED_DIR}/tools/${PORT}")
+    set(OPENMVG_CAMERA_SENSOR_WIDTH_DIRECTORY "${CURRENT_INSTALLED_DIR}/tools/${PORT}")
+    configure_file("${SOURCE_PATH}/src/software/SfM/tutorial_demo.py.in" "${CURRENT_PACKAGES_DIR}/tools/${PORT}/tutorial_demo.py" @ONLY)
+    configure_file("${SOURCE_PATH}/src/software/SfM/SfM_GlobalPipeline.py.in" "${CURRENT_PACKAGES_DIR}/tools/${PORT}/SfM_GlobalPipeline.py" @ONLY)
+    configure_file("${SOURCE_PATH}/src/software/SfM/SfM_SequentialPipeline.py.in" "${CURRENT_PACKAGES_DIR}/tools/${PORT}/SfM_SequentialPipeline.py" @ONLY)
+endif()
+
+# Handle copyright
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

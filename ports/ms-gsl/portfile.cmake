@@ -1,15 +1,26 @@
-#header-only library
-include(vcpkg_common_functions)
-
+#header-only library with an install target
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO Microsoft/GSL
-    REF 7d78b743e43ecba06ca47426d03d9d16076dec16
-    SHA512 2174ad6a1eaced41e00f0781d13e68ca981644c20ba66e8e6e10b75d910203d860a93d3e9875a0560a9b7aee88e5703880014af67ab32028bffebb06f79811b7
-    HEAD_REF master
+    REF a3534567187d2edc428efd3f13466ff75fe5805c
+    SHA512 5bd6aad37fee3b56a2ee2fed10d6ef02fdcf37a1f40b3fb1bbec8146a573e235169b315405d010ab75175674ed82658c8202f40b128a849c5250b4a1b8b0a1b3
+    HEAD_REF main
 )
 
-file(INSTALL ${SOURCE_PATH}/include/ DESTINATION ${CURRENT_PACKAGES_DIR}/include)
+vcpkg_cmake_configure(
+    SOURCE_PATH ${SOURCE_PATH}
+    OPTIONS
+        -DGSL_TEST=OFF
+)
+
+vcpkg_cmake_install()
+
+vcpkg_cmake_config_fixup(
+    PACKAGE_NAME Microsoft.GSL
+    CONFIG_PATH share/cmake/Microsoft.GSL
+)
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug")
 
 # Handle copyright
-file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/ms-gsl RENAME copyright)
+file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/${PORT} RENAME copyright)

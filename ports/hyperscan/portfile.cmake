@@ -1,41 +1,29 @@
-# Build with 'vcpkg.exe install hyperscan:x86-windows-static-release'; Hyperscan doesn't support dynamic libraries on Windows.
-include(vcpkg_common_functions)
-
 vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
+set(HYPERSCAN_VERSION 5.4.0)
 
-set(HYPERSCAN_VERSION 5.1.0)
-vcpkg_download_distfile(ARCHIVE
-    URLS "https://github.com/intel/hyperscan/archive/v${HYPERSCAN_VERSION}.zip"
-    FILENAME "v${HYPERSCAN_VERSION}.zip"
-    SHA512 89a826c1e66175f1781f57d0d430f2d5d245ab590acc4b5df6638c5f6fe43914db028f8bc86e566ea27b55883c91be0d8da079b3d7547899f7cf540b52a3cf0a
-)
-
-vcpkg_extract_source_archive_ex(
+vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
-    ARCHIVE ${ARCHIVE}
-    REF ${HYPERSCAN_VERSION})
-
-vcpkg_find_acquire_program(PYTHON3)
-
-# Add python3 to path
-get_filename_component(PYTHON_PATH ${PYTHON3} DIRECTORY)
-vcpkg_add_to_path(PREPEND ${PYTHON_PATH})
-vcpkg_add_to_path(${CURRENT_INSTALLED_DIR}/bin)
-vcpkg_add_to_path(${CURRENT_INSTALLED_DIR}/debug/bin)
-vcpkg_find_acquire_program(PYTHON3)
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+    REPO intel/hyperscan
+    REF v${HYPERSCAN_VERSION}
+    SHA512 cfec3f43b9e8b3fbb2e761927f3a173c1230f2688da710ec7708f2941ce6f550a1d3cb48b0b0e2ccf709807390117a7e40047cb99190bcc341f37eb3da13ae62
+    HEAD_REF master
+    PATCHES
+        0001-remove-Werror.patch
 )
 
-vcpkg_install_cmake()
+vcpkg_find_acquire_program(PYTHON3)
 
-# Handle copyright
-file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/hyperscan RENAME copyright)
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS "-DPYTHON_EXECUTABLE=${PYTHON3}"
+)
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
+vcpkg_cmake_install()
 
-# Post-build test for cmake libraries
-# vcpkg_test_cmake(PACKAGE_NAME hs)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
+
+vcpkg_fixup_pkgconfig()

@@ -1,27 +1,34 @@
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
-    REPO Microsoft/cppgraphqlgen
-    REF v2.1.0
-    SHA512 6fdeade25fc5c4af18d0288b80044a94cc9dcba9eed1640ec2cce06741b874f027930761964ed72073a25e083c0cf2fb828b9cf9732099c8a4f185776b1e1b8a
-    HEAD_REF master
+    REPO microsoft/cppgraphqlgen
+    REF v4.5.0
+    SHA512 5a8eb6fc90aee05ae25245fac3e97a00c637d61340a070a28f1e5b7827d0e18ed01d3e6c4dcc138961769f7eef64ac8c6b33f7f16f8536d070a5ddffad0de414
+    HEAD_REF main
 )
 
-vcpkg_configure_cmake(
+vcpkg_cmake_configure(
     SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
-    OPTIONS -DBUILD_TESTS=OFF -DUPDATE_SAMPLES=OFF
-    OPTIONS_RELEASE -DCMAKE_INSTALL_CONFIGDIR=${CURRENT_PACKAGES_DIR}/share/cppgraphqlgen -DCMAKE_INSTALL_TOOLSDIR=${CURRENT_PACKAGES_DIR}/tools/cppgraphqlgen
-    OPTIONS_DEBUG -DCMAKE_INSTALL_CONFIGDIR=${CURRENT_PACKAGES_DIR}/debug/share/cppgraphqlgen -DCMAKE_INSTALL_TOOLSDIR=${CURRENT_PACKAGES_DIR}/debug/tools/cppgraphqlgen
+    OPTIONS 
+        -DGRAPHQL_BUILD_TESTS=OFF 
+        -DGRAPHQL_UPDATE_VERSION=OFF 
+        -DGRAPHQL_UPDATE_SAMPLES=OFF 
+        -DGRAPHQL_INSTALL_CONFIGURATIONS=Release
+    OPTIONS_RELEASE 
+        -DGRAPHQL_INSTALL_CMAKE_DIR=${CURRENT_PACKAGES_DIR}/share 
+        -DGRAPHQL_INSTALL_TOOLS_DIR=${CURRENT_PACKAGES_DIR}/tools
+    OPTIONS_DEBUG 
+        -DGRAPHQL_INSTALL_CMAKE_DIR=${CURRENT_PACKAGES_DIR}/debug/share 
+        -DGRAPHQL_INSTALL_TOOLS_DIR=${CURRENT_PACKAGES_DIR}/debug/tools
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 
-vcpkg_fixup_cmake_targets()
+vcpkg_cmake_config_fixup()
+
+vcpkg_copy_tools(
+    TOOL_NAMES schemagen clientgen
+    SEARCH_DIR ${CURRENT_PACKAGES_DIR}/tools/cppgraphqlgen)
 
 vcpkg_copy_pdbs()
 
-configure_file(${SOURCE_PATH}/LICENSE ${CURRENT_PACKAGES_DIR}/share/cppgraphqlgen/copyright COPYONLY)
-
-vcpkg_test_cmake(PACKAGE_NAME cppgraphqlgen)
+file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/${PORT} RENAME copyright)

@@ -1,127 +1,147 @@
-## # vcpkg_from_git
-##
-## Download and extract a project from git
-##
-## ## Usage:
-## ```cmake
-## vcpkg_from_git(
-##     OUT_SOURCE_PATH <SOURCE_PATH>
-##     URL <https://android.googlesource.com/platform/external/fdlibm>
-##     REF <59f7335e4d...>
-##     SHA512 <abcdef123...>
-##     [PATCHES <patch1.patch> <patch2.patch>...]
-## )
-## ```
-##
-## ## Parameters:
-## ### OUT_SOURCE_PATH
-## Specifies the out-variable that will contain the extracted location.
-##
-## This should be set to `SOURCE_PATH` by convention.
-##
-## ### URL
-## The url of the git repository.
-##
-## ### SHA512
-## The SHA512 hash that should match the archive form of the commit.
-##
-## This is most easily determined by first setting it to `0`, then trying to build the port. The error message will contain the full hash, which can be copied back into the portfile.
-##
-## ### REF
-## A stable git commit-ish (ideally a tag or commit) that will not change contents. **This should not be a branch.**
-##
-## For repositories without official releases, this can be set to the full commit id of the current latest master.
-##
-## ### PATCHES
-## A list of patches to be applied to the extracted sources.
-##
-## Relative paths are based on the port directory.
-##
-## ## Notes:
-## `OUT_SOURCE_PATH`, `REF`, `SHA512`, and `URL` must be specified.
-##
-## ## Examples:
-##
-## * [fdlibm](https://github.com/Microsoft/vcpkg/blob/master/ports/fdlibm/portfile.cmake)
-
 function(vcpkg_from_git)
-  set(oneValueArgs OUT_SOURCE_PATH URL REF SHA512)
-  set(multipleValuesArgs PATCHES)
-  cmake_parse_arguments(_vdud "" "${oneValueArgs}" "${multipleValuesArgs}" ${ARGN})
+    cmake_parse_arguments(PARSE_ARGV 0 "arg"
+        ""
+        "OUT_SOURCE_PATH;URL;REF;FETCH_REF;HEAD_REF;TAG"
+        "PATCHES"
+    )
 
-  if(NOT DEFINED _vdud_OUT_SOURCE_PATH)
-    message(FATAL_ERROR "OUT_SOURCE_PATH must be specified.")
-  endif()
-
-  if(NOT DEFINED _vdud_URL)
-    message(FATAL_ERROR "The git url must be specified")
-  endif()
-
-  if(NOT DEFINED _vdud_REF)
-    message(FATAL_ERROR "The git ref must be specified.")
-  endif()
-
-  if(NOT DEFINED _vdud_SHA512)
-    message(FATAL_ERROR "vcpkg_from_git requires a SHA512 argument. If you do not know the SHA512, add it as 'SHA512 0' and re-run this command.")
-  endif()
-
-  # using .tar.gz instead of .zip because the hash of the latter is affected by timezone.
-  string(REPLACE "/" "-" SANITIZED_REF "${_vdud_REF}")
-  set(TEMP_ARCHIVE "${DOWNLOADS}/temp/${PORT}-${SANITIZED_REF}.tar.gz")
-  set(ARCHIVE "${DOWNLOADS}/${PORT}-${SANITIZED_REF}.tar.gz")
-  set(TEMP_SOURCE_PATH "${CURRENT_BUILDTREES_DIR}/src/${SANITIZED_REF}")
-
-  function(test_hash FILE_PATH FILE_KIND CUSTOM_ERROR_ADVICE)
-    file(SHA512 ${FILE_PATH} FILE_HASH)
-    if(NOT FILE_HASH STREQUAL _vdud_SHA512)
-        message(FATAL_ERROR
-            "\nFile does not have expected hash:\n"
-            "        File path: [ ${FILE_PATH} ]\n"
-            "    Expected hash: [ ${_vdud_SHA512} ]\n"
-            "      Actual hash: [ ${FILE_HASH} ]\n"
-            "${CUSTOM_ERROR_ADVICE}\n")
+    if(DEFINED arg_UNPARSED_ARGUMENTS)
+        message(WARNING "vcpkg_from_git was passed extra arguments: ${arg_UNPARSED_ARGUMENTS}")
     endif()
-  endfunction()
-
-  if(NOT EXISTS "${ARCHIVE}")
-    if(_VCPKG_NO_DOWNLOADS)
-        message(FATAL_ERROR "Downloads are disabled, but '${ARCHIVE}' does not exist.")
+    if(DEFINED arg_TAG)
+        message(WARNING "The TAG argument to vcpkg_from_git has been deprecated and has no effect.")
     endif()
-    message(STATUS "Fetching ${_vdud_URL}...")
-    find_program(GIT NAMES git git.cmd)
-    # Note: git init is safe to run multiple times
-    vcpkg_execute_required_process(
-      COMMAND ${GIT} init git-tmp
-      WORKING_DIRECTORY ${DOWNLOADS}
-      LOGNAME git-init
-    )
-    vcpkg_execute_required_process(
-      COMMAND ${GIT} fetch ${_vdud_URL} ${_vdud_REF} --depth 1 -n
-      WORKING_DIRECTORY ${DOWNLOADS}/git-tmp
-      LOGNAME git-fetch
-    )
-    file(MAKE_DIRECTORY "${DOWNLOADS}/temp")
-    vcpkg_execute_required_process(
-      COMMAND ${GIT} archive FETCH_HEAD -o "${TEMP_ARCHIVE}"
-      WORKING_DIRECTORY ${DOWNLOADS}/git-tmp
-      LOGNAME git-archive
-    )
-    test_hash("${TEMP_ARCHIVE}" "downloaded repo" "")
-    get_filename_component(downloaded_file_dir "${ARCHIVE}" DIRECTORY)
-    file(MAKE_DIRECTORY "${downloaded_file_dir}")
-    file(RENAME "${TEMP_ARCHIVE}" "${ARCHIVE}")
-  else()
-    message(STATUS "Using cached ${ARCHIVE}")
-    test_hash("${ARCHIVE}" "cached file" "Please delete the file and retry if this file should be downloaded again.")
-  endif()
 
-  vcpkg_extract_source_archive_ex(
-    OUT_SOURCE_PATH SOURCE_PATH
-    ARCHIVE "${ARCHIVE}"
-    REF "${SANITIZED_REF}"
-    PATCHES ${_vdud_PATCHES}
-    NO_REMOVE_ONE_LEVEL
-  )
 
-  set(${_vdud_OUT_SOURCE_PATH} "${SOURCE_PATH}" PARENT_SCOPE)
+    if(NOT DEFINED arg_OUT_SOURCE_PATH)
+        message(FATAL_ERROR "OUT_SOURCE_PATH must be specified")
+    endif()
+    if(NOT DEFINED arg_URL)
+        message(FATAL_ERROR "URL must be specified")
+    endif()
+    if(NOT DEFINED arg_REF AND NOT DEFINED arg_HEAD_REF)
+        message(FATAL_ERROR "At least one of REF or HEAD_REF must be specified")
+    endif()
+    if(DEFINED arg_FETCH_REF AND NOT DEFINED arg_REF)
+        message(FATAL_ERROR "REF must be specified if FETCH_REF is specified")
+    endif()
+
+    vcpkg_list(SET git_fetch_shallow_param --depth 1)
+    vcpkg_list(SET extract_working_directory_param)
+    vcpkg_list(SET skip_patch_check_param)
+    set(git_working_directory "${DOWNLOADS}/git-tmp")
+    set(do_download OFF)
+
+    if(VCPKG_USE_HEAD_VERSION AND DEFINED arg_HEAD_REF)
+        vcpkg_list(SET working_directory_param "WORKING_DIRECTORY" "${CURRENT_BUILDTREES_DIR}/src/head")
+        vcpkg_list(SET git_fetch_shallow_param --depth 1)
+        vcpkg_list(SET skip_patch_check_param SKIP_PATCH_CHECK)
+        set(ref_to_fetch "${arg_HEAD_REF}")
+        set(git_working_directory "${CURRENT_BUILDTREES_DIR}/src/git-tmp")
+        string(REPLACE "/" "_-" sanitized_ref "${arg_HEAD_REF}")
+
+        if(NOT _VCPKG_NO_DOWNLOADS)
+            set(do_download ON)
+        endif()
+    else()
+        if(NOT DEFINED arg_REF)
+            message(FATAL_ERROR "Package does not specify REF. It must be built using --head.")
+        endif()
+        if(VCPKG_USE_HEAD_VERSION)
+            message(STATUS "Package does not specify HEAD_REF. Falling back to non-HEAD version.")
+        endif()
+
+        if(DEFINED arg_FETCH_REF)
+            set(ref_to_fetch "${arg_FETCH_REF}")
+            vcpkg_list(SET git_fetch_shallow_param)
+        else()
+            set(ref_to_fetch "${arg_REF}")
+        endif()
+        string(REPLACE "/" "_-" sanitized_ref "${arg_REF}")
+    endif()
+
+    set(temp_archive "${DOWNLOADS}/temp/${PORT}-${sanitized_ref}.tar.gz")
+    set(archive "${DOWNLOADS}/${PORT}-${sanitized_ref}.tar.gz")
+
+    if(NOT EXISTS "${archive}")
+        if(_VCPKG_NO_DOWNLOADS)
+            message(FATAL_ERROR "Downloads are disabled, but '${archive}' does not exist.")
+        endif()
+        set(do_download ON)
+    endif()
+
+    if(do_download)
+        message(STATUS "Fetching ${arg_URL} ${ref_to_fetch}...")
+        find_program(GIT NAMES git git.cmd)
+        file(MAKE_DIRECTORY "${DOWNLOADS}")
+        # Note: git init is safe to run multiple times
+        vcpkg_execute_required_process(
+            ALLOW_IN_DOWNLOAD_MODE
+            COMMAND "${GIT}" init "${git_working_directory}"
+            WORKING_DIRECTORY "${CURRENT_BUILDTREES_DIR}"
+            LOGNAME "git-init-${TARGET_TRIPLET}"
+        )
+        vcpkg_execute_required_process(
+            ALLOW_IN_DOWNLOAD_MODE
+            COMMAND "${GIT}" fetch "${arg_URL}" "${ref_to_fetch}" ${git_fetch_shallow_param} -n
+            WORKING_DIRECTORY "${git_working_directory}"
+            LOGNAME "git-fetch-${TARGET_TRIPLET}"
+        )
+
+        if(VCPKG_USE_HEAD_VERSION)
+            vcpkg_execute_in_download_mode(
+                COMMAND "${GIT}" rev-parse FETCH_HEAD
+                OUTPUT_VARIABLE rev_parse_ref
+                ERROR_VARIABLE rev_parse_ref
+                RESULT_VARIABLE error_code
+                WORKING_DIRECTORY "${git_working_directory}"
+            )
+            if(error_code)
+                message(FATAL_ERROR "unable to determine FETCH_HEAD after fetching git repository")
+            endif()
+            string(STRIP "${rev_parse_ref}" rev_parse_ref)
+            set(VCPKG_HEAD_VERSION "${rev_parse_ref}" PARENT_SCOPE)
+        else()
+            vcpkg_execute_in_download_mode(
+                COMMAND "${GIT}" rev-parse "${arg_REF}"
+                OUTPUT_VARIABLE rev_parse_ref
+                ERROR_VARIABLE rev_parse_ref
+                RESULT_VARIABLE error_code
+                WORKING_DIRECTORY "${git_working_directory}"
+            )
+            if(error_code)
+                message(FATAL_ERROR "unable to rev-parse ${arg_REF} after fetching git repository")
+            endif()
+            string(STRIP "${rev_parse_ref}" rev_parse_ref)
+            if(NOT "${rev_parse_ref}" STREQUAL "${arg_REF}")
+                message(FATAL_ERROR "REF (${arg_REF}) does not match rev-parse'd reference (${rev_parse_ref})
+        [Expected : ( ${arg_REF} )])
+        [  Actual : ( ${rev_parse_ref} )]"
+                )
+            endif()
+        endif()
+
+        file(MAKE_DIRECTORY "${DOWNLOADS}/temp")
+        vcpkg_execute_required_process(
+            ALLOW_IN_DOWNLOAD_MODE
+            COMMAND "${GIT}" -c core.autocrlf=false archive "${rev_parse_ref}" -o "${temp_archive}"
+            WORKING_DIRECTORY "${git_working_directory}"
+            LOGNAME git-archive
+        )
+        file(RENAME "${temp_archive}" "${archive}")
+    else()
+        message(STATUS "Using cached ${archive}")
+    endif()
+
+    vcpkg_extract_source_archive_ex(
+        OUT_SOURCE_PATH SOURCE_PATH
+        ARCHIVE "${archive}"
+        REF "${sanitized_ref}"
+        PATCHES ${arg_PATCHES}
+        NO_REMOVE_ONE_LEVEL
+        ${extract_working_directory_param}
+        ${skip_patch_check_param}
+    )
+
+    set("${arg_OUT_SOURCE_PATH}" "${SOURCE_PATH}" PARENT_SCOPE)
 endfunction()

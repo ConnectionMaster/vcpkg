@@ -1,60 +1,39 @@
-include(vcpkg_common_functions)
-
-if(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    message(STATUS "nmslib only supports static linkage. Building statically.")
-    set(VCPKG_LIBRARY_LINKAGE static)
-endif()
+vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
-    REPO searchivarius/nmslib
-    REF v1.7.2
-    SHA512 2f910f752bfb1146aa8d1765fd5faf64d718a92ab7edf9d8ac0a2d9c4359d42b07b3cd553e2aff93da8b009add52ab9cce6b841f5175f57163f73f643ff62c19
+    REPO nmslib/nmslib
+    REF v2.1.1
+    SHA512 62BBB965EA4BF1D416ED78231B1BA4B41C0F46327D7BE16D1F98095DB63EF0E0D893B70040009711BC9C68555B1B8C4038F5032ABD66B759E955E2CBB0553EC3
     HEAD_REF master
 )
 
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}
-    PATCHES
-        ${CMAKE_CURRENT_LIST_DIR}/fix-headers.patch
-        ${CMAKE_CURRENT_LIST_DIR}/fix-cmake-order.patch
+# TODO: check SSE and AVX availability and set corresponding tags
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}/similarity_search"
 )
 
-set(WITH_EXTRAS OFF)
-if("extra" IN_LIST FEATURES)
-    set(WITH_EXTRAS ON)
-endif()
-
-# TODO: check SSE and AVX avability and set corresponding tags
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}/similarity_search
-    OPTIONS
-        -DWITH_EXTRAS=${WITH_EXTRAS}
-)
-
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 vcpkg_copy_pdbs()
 
 # Move headers into separate folder
 set(SUBFOLDERS factory method space)
-file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/include/nmslib)
-foreach(SUBFOLER ${SUBFOLDERS})
-    file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/include/nmslib/${SUBFOLER}) 
+file(MAKE_DIRECTORY "${CURRENT_PACKAGES_DIR}/include/nmslib")
+foreach(SUBFOLDER ${SUBFOLDERS})
+    file(MAKE_DIRECTORY "${CURRENT_PACKAGES_DIR}/include/nmslib/${SUBFOLDER}")
 endforeach()
 
-file(GLOB HEADERS ${CURRENT_PACKAGES_DIR}/include/*.h ${CURRENT_PACKAGES_DIR}/include/*/*.h)
+file(GLOB HEADERS "${CURRENT_PACKAGES_DIR}/include/*.h" "${CURRENT_PACKAGES_DIR}/include/*/*.h")
 foreach(HEADER ${HEADERS})
-    string(REPLACE "${CURRENT_PACKAGES_DIR}/include" "${CURRENT_PACKAGES_DIR}/include/nmslib"
-                   MOVED_HEADER ${HEADER})
-    file(RENAME ${HEADER} ${MOVED_HEADER})
+    string(REPLACE "${CURRENT_PACKAGES_DIR}/include" "${CURRENT_PACKAGES_DIR}/include/nmslib" MOVED_HEADER "${HEADER}")
+    file(RENAME "${HEADER}" "${MOVED_HEADER}")
 endforeach(HEADER ${HEADERS})
 
-foreach(SUBFOLER ${SUBFOLDERS})
-    file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/include/${SUBFOLER}/) 
+foreach(SUBFOLDER ${SUBFOLDERS})
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/include/${SUBFOLDER}/")
 endforeach()
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
 
 # Put the license file where vcpkg expects it
-file(COPY ${SOURCE_PATH}/README.md DESTINATION ${CURRENT_PACKAGES_DIR}/share/nmslib/)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/nmslib/README.md ${CURRENT_PACKAGES_DIR}/share/nmslib/copyright)
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

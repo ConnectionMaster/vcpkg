@@ -1,176 +1,76 @@
-# Common Ambient Variables:
-#   VCPKG_ROOT_DIR = <C:\path\to\current\vcpkg>
-#   TARGET_TRIPLET is the current triplet (x86-windows, etc)
-#   PORT is the current port name (zlib, etc)
-#   CURRENT_BUILDTREES_DIR = ${VCPKG_ROOT_DIR}\buildtrees\${PORT}
-#   CURRENT_PACKAGES_DIR  = ${VCPKG_ROOT_DIR}\packages\${PORT}_${TARGET_TRIPLET}
-#
-
-include(vcpkg_common_functions)
-set(SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/libxslt-1.1.29)
-vcpkg_download_distfile(ARCHIVE
-    URLS "ftp://xmlsoft.org/libxslt/libxslt-1.1.29.tar.gz"
-    FILENAME "libxslt-1.1.29.tar.gz"
-    SHA512 a1ce555a74a9dabe65e8f64bb66e27e77760fd76940d88f2d59f58dd63ca73c8ae59f3fcbd8e76c8f92ff992fb0c09328528c20ea38ccac83e63252106bf5f31
-)
-vcpkg_extract_source_archive(${ARCHIVE})
-
-find_program(NMAKE nmake)
-
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}/
-    PATCHES ${CMAKE_CURRENT_LIST_DIR}/0001-Fix-makefile.patch
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO GNOME/libxslt
+    REF v1.1.37
+    SHA512 4e7a57cbe02ceea34404213a88bdbb63a756edfab63063ce3979b670816ae3f6fb3637a49508204e6e46b936628e0a3b8b77e9201530a1184225bd68da403b25
+    HEAD_REF master
+    PATCHES
+        python3.patch
+        msvc-no-suffix.patch
+        libexslt-pkgconfig.patch
+        fix-gcrypt-deps.patch
+        skip-install-docs.patch
 )
 
-set(SCRIPTS_DIR ${SOURCE_PATH}/win32)
-
-set(CONFIGURE_COMMAND_TEMPLATE cscript configure.js
-    cruntime=@CRUNTIME@
-    debug=@DEBUGMODE@
-    prefix=@INSTALL_DIR@
-    include=@INCLUDE_DIR@
-    lib=@LIB_DIR@
-    bindir=$(PREFIX)\\tools\\
-    sodir=$(PREFIX)\\bin\\
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        "python"          LIBXSLT_WITH_PYTHON
+        "crypto"          LIBXSLT_WITH_CRYPTO
 )
-
-# Create some directories ourselves, because the makefile doesn't
-file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/bin)
-file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/debug/bin)
-
-#
-# Release
-#
-
-message(STATUS "Configuring ${TARGET_TRIPLET}-rel")
-
-if(VCPKG_CRT_LINKAGE STREQUAL dynamic)
-    set(CRUNTIME /MD)
-else()
-    set(CRUNTIME /MT)
+if("python" IN_LIST FEATURES)
+    vcpkg_find_acquire_program(PYTHON3)
+    list(APPEND FEATURE_OPTIONS "-DPYTHON_EXECUTABLE=${PYTHON3}")
+    list(APPEND FEATURE_OPTIONS_RELEASE "-DLIBXSLT_PYTHON_INSTALL_DIR=${CURRENT_PACKAGES_DIR}/lib/site-packages")
+    list(APPEND FEATURE_OPTIONS_DEBUG "-DLIBXSLT_PYTHON_INSTALL_DIR=${CURRENT_PACKAGES_DIR}/debug/lib/site-packages")
 endif()
-set(DEBUGMODE no)
-set(LIB_DIR ${CURRENT_INSTALLED_DIR}/lib)
-set(INCLUDE_DIR ${CURRENT_INSTALLED_DIR}/include)
-set(INSTALL_DIR ${CURRENT_PACKAGES_DIR})
-file(TO_NATIVE_PATH "${LIB_DIR}" LIB_DIR)
-file(TO_NATIVE_PATH "${INCLUDE_DIR}" INCLUDE_DIR)
-file(TO_NATIVE_PATH "${INSTALL_DIR}" INSTALL_DIR)
-string(CONFIGURE "${CONFIGURE_COMMAND_TEMPLATE}" CONFIGURE_COMMAND)
-vcpkg_execute_required_process(
-    COMMAND ${CONFIGURE_COMMAND}
-    WORKING_DIRECTORY ${SCRIPTS_DIR}
-    LOGNAME config-${TARGET_TRIPLET}-rel
-)
-# Handle build output directory
-file(TO_NATIVE_PATH "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel" OUTDIR)
-file(MAKE_DIRECTORY "${OUTDIR}")
-message(STATUS "Configuring ${TARGET_TRIPLET}-rel done")
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        ${FEATURE_OPTIONS}
+        -DLIBXSLT_WITH_TESTS:BOOL=OFF
+        -DLIBXSLT_WITH_THREADS:BOOL=ON
+    OPTIONS_RELEASE
+        ${FEATURE_OPTIONS_RELEASE}
+        -DLIBXSLT_WITH_XSLT_DEBUG:BOOL=OFF
+        -DLIBXSLT_WITH_MEM_DEBUG:BOOL=OFF
+        -DLIBXSLT_WITH_DEBUGGER:BOOL=OFF
+    OPTIONS_DEBUG
+        ${FEATURE_OPTIONS_DEBUG}
+        -DLIBXSLT_WITH_XSLT_DEBUG:BOOL=ON
+        -DLIBXSLT_WITH_MEM_DEBUG:BOOL=ON
+        -DLIBXSLT_WITH_DEBUGGER:BOOL=ON
+    )
+vcpkg_cmake_install()
+file(GLOB config_path RELATIVE "${CURRENT_PACKAGES_DIR}" "${CURRENT_PACKAGES_DIR}/lib/cmake/libxslt-*")
+vcpkg_cmake_config_fixup(CONFIG_PATH "${config_path}")
 
-message(STATUS "Building ${TARGET_TRIPLET}-rel")
-vcpkg_execute_required_process(
-    COMMAND ${NMAKE} /f Makefile.msvc rebuild OUTDIR=${OUTDIR}
-    WORKING_DIRECTORY ${SCRIPTS_DIR}
-    LOGNAME build-${TARGET_TRIPLET}-rel
-)
-message(STATUS "Building ${TARGET_TRIPLET}-rel done")
+file(REMOVE "${CURRENT_PACKAGES_DIR}/lib/xsltConf.sh" "${CURRENT_PACKAGES_DIR}/debug/lib/xsltConf.sh")
 
-message(STATUS "Installing ${TARGET_TRIPLET}-rel")
-vcpkg_execute_required_process(
-    COMMAND ${NMAKE} /f Makefile.msvc install OUTDIR=${OUTDIR}
-    WORKING_DIRECTORY ${SCRIPTS_DIR}
-    LOGNAME install-${TARGET_TRIPLET}-rel
-)
-message(STATUS "Installing ${TARGET_TRIPLET}-rel done")
-
-
-#
-# Debug
-#
-
-message(STATUS "Configuring ${TARGET_TRIPLET}-dbg")
-
-if(VCPKG_CRT_LINKAGE STREQUAL dynamic)
-    set(CRUNTIME /MDd)
-else()
-    set(CRUNTIME /MTd)
+file(MAKE_DIRECTORY "${CURRENT_PACKAGES_DIR}/tools/libxslt")
+file(RENAME "${CURRENT_PACKAGES_DIR}/bin/xslt-config" "${CURRENT_PACKAGES_DIR}/tools/libxslt/xslt-config")
+vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/tools/libxslt/xslt-config" [[$(cd "$(dirname "$0")"; pwd -P)/..]] [[$(cd "$(dirname "$0")/../.."; pwd -P)]])
+if(NOT VCPKG_BUILD_TYPE)
+    file(MAKE_DIRECTORY "${CURRENT_PACKAGES_DIR}/tools/libxslt/debug")
+    file(RENAME "${CURRENT_PACKAGES_DIR}/debug/bin/xslt-config" "${CURRENT_PACKAGES_DIR}/tools/libxslt/debug/xslt-config")
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/tools/libxslt/debug/xslt-config" [[$(cd "$(dirname "$0")"; pwd -P)/..]] [[$(cd "$(dirname "$0")/../../../debug"; pwd -P)]])
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/tools/libxslt/debug/xslt-config" [[${prefix}/include]] [[${prefix}/../include]])
 endif()
-set(DEBUGMODE yes)
-set(LIB_DIR ${CURRENT_INSTALLED_DIR}/debug/lib)
-set(INSTALL_DIR ${CURRENT_PACKAGES_DIR}/debug)
-file(TO_NATIVE_PATH "${LIB_DIR}" LIB_DIR)
-file(TO_NATIVE_PATH "${INSTALL_DIR}" INSTALL_DIR)
-string(CONFIGURE "${CONFIGURE_COMMAND_TEMPLATE}" CONFIGURE_COMMAND)
+vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/libxslt/xsltconfig.h" "#define LIBXSLT_DEFAULT_PLUGINS_PATH() \"${CURRENT_INSTALLED_DIR}/lib/libxslt-plugins\"" "")
+vcpkg_copy_tools(TOOL_NAMES xsltproc AUTO_CLEAN)
 
-vcpkg_execute_required_process(
-    COMMAND ${CONFIGURE_COMMAND}
-    WORKING_DIRECTORY ${SCRIPTS_DIR}
-    LOGNAME config-${TARGET_TRIPLET}-dbg
-)
-# Handle build output directory
-file(TO_NATIVE_PATH "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg" OUTDIR)
-file(MAKE_DIRECTORY "${OUTDIR}")
-message(STATUS "Configuring ${TARGET_TRIPLET}-dbg done")
-
-message(STATUS "Building ${TARGET_TRIPLET}-dbg")
-vcpkg_execute_required_process(
-    COMMAND ${NMAKE} /f Makefile.msvc rebuild OUTDIR=${OUTDIR}
-    WORKING_DIRECTORY ${SCRIPTS_DIR}
-    LOGNAME build-${TARGET_TRIPLET}-dbg
-)
-message(STATUS "Building ${TARGET_TRIPLET}-dbg done")
-
-message(STATUS "Installing ${TARGET_TRIPLET}-dbg")
-vcpkg_execute_required_process(
-    COMMAND ${NMAKE} /f Makefile.msvc install OUTDIR=${OUTDIR}
-    WORKING_DIRECTORY ${SCRIPTS_DIR}
-    LOGNAME install-${TARGET_TRIPLET}-dbg
-)
-message(STATUS "Installing ${TARGET_TRIPLET}-dbg done")
-
-#
-# Cleanup
-#
-
-# You have to define LIB(E)XSLT_STATIC or not, depending on how you link
-file(READ ${CURRENT_PACKAGES_DIR}/include/libxslt/xsltexports.h XSLTEXPORTS_H)
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    string(REPLACE "!defined(LIBXSLT_STATIC)" "0" XSLTEXPORTS_H "${XSLTEXPORTS_H}")
-else()
-    string(REPLACE "!defined(LIBXSLT_STATIC)" "1" XSLTEXPORTS_H "${XSLTEXPORTS_H}")
-endif()
-file(WRITE ${CURRENT_PACKAGES_DIR}/include/libxslt/xsltexports.h "${XSLTEXPORTS_H}")
-
-file(READ ${CURRENT_PACKAGES_DIR}/include/libexslt/exsltexports.h EXSLTEXPORTS_H)
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    string(REPLACE "!defined(LIBEXSLT_STATIC)" "0" EXSLTEXPORTS_H "${EXSLTEXPORTS_H}")
-else()
-    string(REPLACE "!defined(LIBEXSLT_STATIC)" "1" EXSLTEXPORTS_H "${EXSLTEXPORTS_H}")
-endif()
-file(WRITE ${CURRENT_PACKAGES_DIR}/include/libexslt/exsltexports.h "${EXSLTEXPORTS_H}")
-
-# Remove tools and debug include directories
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/tools)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/tools)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-
-# The makefile builds both static and dynamic libraries, so remove the ones we don't want
-if(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    file(REMOVE ${CURRENT_PACKAGES_DIR}/lib/libxslt_a.lib ${CURRENT_PACKAGES_DIR}/lib/libexslt_a.lib)
-    file(REMOVE ${CURRENT_PACKAGES_DIR}/debug/lib/libxslt_a.lib ${CURRENT_PACKAGES_DIR}/debug/lib/libexslt_a.lib)
-else()
-    file(REMOVE ${CURRENT_PACKAGES_DIR}/lib/libxslt.lib ${CURRENT_PACKAGES_DIR}/lib/libexslt.lib)
-    file(REMOVE ${CURRENT_PACKAGES_DIR}/debug/lib/libxslt.lib ${CURRENT_PACKAGES_DIR}/debug/lib/libexslt.lib)
-    file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/bin ${CURRENT_PACKAGES_DIR}/debug/bin)
-    # Rename the libs to match the dynamic lib names
-    file(RENAME ${CURRENT_PACKAGES_DIR}/lib/libxslt_a.lib ${CURRENT_PACKAGES_DIR}/lib/libxslt.lib)
-    file(RENAME ${CURRENT_PACKAGES_DIR}/lib/libexslt_a.lib ${CURRENT_PACKAGES_DIR}/lib/libexslt.lib)
-    file(RENAME ${CURRENT_PACKAGES_DIR}/debug/lib/libxslt_a.lib ${CURRENT_PACKAGES_DIR}/debug/lib/libxslt.lib)
-    file(RENAME ${CURRENT_PACKAGES_DIR}/debug/lib/libexslt_a.lib ${CURRENT_PACKAGES_DIR}/debug/lib/libexslt.lib)
-endif()
-
-# Handle copyright
-file(COPY ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/libxslt)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/libxslt/COPYING ${CURRENT_PACKAGES_DIR}/share/libxslt/copyright)
-
+vcpkg_fixup_pkgconfig()
 vcpkg_copy_pdbs()
+
+set(not_static 1)
+if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
+    set(not_static 0)
+endif()
+vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/libxslt/xsltexports.h" "!defined(LIBXSLT_STATIC)" "${not_static}")
+vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/libexslt/exsltexports.h" "!defined(LIBEXSLT_STATIC)" "${not_static}")
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+
+file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/vcpkg-cmake-wrapper.cmake" DESTINATION "${CURRENT_PACKAGES_DIR}/share/libxslt")
+file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
+file(INSTALL "${SOURCE_PATH}/Copyright" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

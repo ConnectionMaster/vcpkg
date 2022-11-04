@@ -1,13 +1,12 @@
 # header-only library
-
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO johnmcfarlane/cnl
-    REF 9f632898a4738b9e41de90e66d4f6ddb84bda08b
-    SHA512 ffde0b5aa58e79b5a03eee588c0e43d17ab2ddb2ffb12508f9d1b0e05aa54bb6c653986f183ce339e73c562efd749af6bd3907d816c9f79bf48f1e84ded3ac13
-    HEAD_REF develop
+    REF 2dde6e62e608a4adc3c5504f067575efa4910568 #v1.1.7
+    SHA512 33a81ea726802c71a684bcd002b5119cde4db471ebc9ba02cd15c7487ab468eeca09fb8dcaed953e3f3cded2cd813a903f808d97527b0ec7f393647b64a22572
+    HEAD_REF main
+    PATCHES
+        disable-test.patch
 )
 
 vcpkg_configure_cmake(
@@ -23,6 +22,3 @@ file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug ${CURRENT_PACKAGES_DIR}/lib)
 
 # Handle copyright
 configure_file(${SOURCE_PATH}/LICENSE_1_0.txt ${CURRENT_PACKAGES_DIR}/share/${PORT}/copyright COPYONLY)
-
-# CMake integration test
-vcpkg_test_cmake(PACKAGE_NAME ${PORT})

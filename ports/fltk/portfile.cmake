@@ -1,89 +1,86 @@
-# Common Ambient Variables:
-#   VCPKG_ROOT_DIR = <C:\path\to\current\vcpkg>
-#   TARGET_TRIPLET is the current triplet (x86-windows, etc)
-#   PORT is the current port name (zlib, etc)
-#   CURRENT_BUILDTREES_DIR = ${VCPKG_ROOT_DIR}\buildtrees\${PORT}
-#   CURRENT_PACKAGES_DIR  = ${VCPKG_ROOT_DIR}\packages\${PORT}_${TARGET_TRIPLET}
-#
+# FLTK has many improperly shared global variables that get duplicated into every DLL
+vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
-include(vcpkg_common_functions)
-set(SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/fltk-1.3.4-1)
-vcpkg_download_distfile(ARCHIVE
-    URLS "http://fltk.org/pub/fltk/1.3.4/fltk-1.3.4-1-source.tar.gz"
-    FILENAME "fltk.tar.gz"
-    SHA512 0be1c8e6bb7a8c7ef484941a73868d5e40b90e97a8e5dc747bac2be53a350621975406ecfd4a9bcee8eeb7afd886e75bf7a6d6478fd6c56d16e54059f22f0891
-)
-vcpkg_extract_source_archive(${ARCHIVE})
-
-vcpkg_apply_patches(
-    SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/fltk-1.3.4-1
-    PATCHES "${CMAKE_CURRENT_LIST_DIR}/findlibsfix.patch"
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO fltk/fltk
+    REF release-1.3.8
+    SHA512 197848d3b80a65cca936daf4f0b74609f0fe8332a4cd11af53385fb2aa45ad698b1e239a48732b118cd3cb189bc531711b72fb2eeeb85be887dc6c5a558fa4b3
+    PATCHES
+        findlibsfix.patch
+        config-path.patch
+        include.patch
+        fix-system-link.patch
 )
 
-if (VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    set(BUILD_SHARED ON)
+if (VCPKG_TARGET_ARCHITECTURE MATCHES "arm" OR VCPKG_TARGET_ARCHITECTURE MATCHES "arm64")
+    set(OPTION_USE_GL "-DOPTION_USE_GL=OFF")
 else()
-    set(BUILD_SHARED OFF)
+    set(OPTION_USE_GL "-DOPTION_USE_GL=ON")
 endif()
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+set(fluid_path_param "")
+if(VCPKG_CROSSCOMPILING)
+    set(fluid_path_param "-DFLUID_PATH=${CURRENT_HOST_INSTALLED_DIR}/tools/fltk/fluid${VCPKG_HOST_EXECUTABLE_SUFFIX}")
+endif()
+
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
-        -DOPTION_BUILD_EXAMPLES=OFF
+        -DFLTK_BUILD_TEST=OFF
+        -DOPTION_LARGE_FILE=ON
+        -DOPTION_USE_THREADS=ON
         -DOPTION_USE_SYSTEM_ZLIB=ON
         -DOPTION_USE_SYSTEM_LIBPNG=ON
         -DOPTION_USE_SYSTEM_LIBJPEG=ON
-        -DOPTION_BUILD_SHARED_LIBS=${BUILD_SHARED}
+        -DOPTION_BUILD_SHARED_LIBS=OFF
+        -DFLTK_CONFIG_PATH=share/fltk
+        ${fluid_path_param}
+        ${OPTION_USE_GL}
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 
-file(REMOVE_RECURSE
-    ${CURRENT_PACKAGES_DIR}/CMAKE
-    ${CURRENT_PACKAGES_DIR}/debug/CMAKE
-    ${CURRENT_PACKAGES_DIR}/debug/include
-)
-
-file(COPY ${CURRENT_PACKAGES_DIR}/bin/fluid.exe DESTINATION ${CURRENT_PACKAGES_DIR}/tools/fltk)
-file(REMOVE ${CURRENT_PACKAGES_DIR}/bin/fluid.exe)
-file(REMOVE ${CURRENT_PACKAGES_DIR}/bin/fltk-config)
-
-file(REMOVE ${CURRENT_PACKAGES_DIR}/debug/bin/fluid.exe)
-file(REMOVE ${CURRENT_PACKAGES_DIR}/debug/bin/fltk-config)
+vcpkg_cmake_config_fixup()
 
 vcpkg_copy_pdbs()
 
-vcpkg_copy_tool_dependencies(${CURRENT_PACKAGES_DIR}/tools/fltk)
+# don't install fluid
+if(VCPKG_CROSSCOMPILING)
+    if(NOT VCPKG_TARGET_IS_WINDOWS)
+        vcpkg_copy_tools(TOOL_NAMES fltk-config AUTO_CLEAN)
+    endif()
+elseif(VCPKG_TARGET_IS_OSX)
+    vcpkg_copy_tools(TOOL_NAMES fluid.app fltk-config AUTO_CLEAN)
+elseif(VCPKG_TARGET_IS_WINDOWS)
+    file(REMOVE "${CURRENT_PACKAGES_DIR}/bin/fltk-config" "${CURRENT_PACKAGES_DIR}/debug/bin/fltk-config")
+    vcpkg_copy_tools(TOOL_NAMES fluid AUTO_CLEAN)
+else()
+    vcpkg_copy_tools(TOOL_NAMES fluid fltk-config AUTO_CLEAN)
+endif()
+if(EXISTS "${CURRENT_PACKAGES_DIR}/tools/fltk/fltk-config")
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/tools/fltk/fltk-config" "${CURRENT_PACKAGES_DIR}" "`dirname $0`/../..")
+endif()
 
 if(VCPKG_LIBRARY_LINKAGE STREQUAL static)
     file(REMOVE_RECURSE
-        ${CURRENT_PACKAGES_DIR}/debug/bin
-        ${CURRENT_PACKAGES_DIR}/bin
+        "${CURRENT_PACKAGES_DIR}/debug/bin"
+        "${CURRENT_PACKAGES_DIR}/bin"
     )
-else()
-    file(GLOB SHARED_LIBS "${CURRENT_PACKAGES_DIR}/lib/*_SHARED.lib" "${CURRENT_PACKAGES_DIR}/debug/lib/*_SHAREDd.lib")
-    file(GLOB STATIC_LIBS "${CURRENT_PACKAGES_DIR}/lib/*.lib" "${CURRENT_PACKAGES_DIR}/debug/lib/*.lib")
-    list(FILTER STATIC_LIBS EXCLUDE REGEX "_SHAREDd?\\.lib\$")
-    file(REMOVE ${STATIC_LIBS})
-    foreach(SHARED_LIB ${SHARED_LIBS})
-        string(REGEX REPLACE "_SHARED(d?)\\.lib\$" "\\1.lib" NEWNAME ${SHARED_LIB})
-        file(RENAME ${SHARED_LIB} ${NEWNAME})
-    endforeach()
 endif()
+file(REMOVE_RECURSE
+    "${CURRENT_PACKAGES_DIR}/debug/include"
+    "${CURRENT_PACKAGES_DIR}/debug/share"
+)
 
 foreach(FILE Fl_Export.H fl_utf8.h)
-    file(READ ${CURRENT_PACKAGES_DIR}/include/FL/${FILE} FLTK_HEADER)
     if(VCPKG_LIBRARY_LINKAGE STREQUAL static)
-        string(REPLACE "defined(FL_DLL)" "0" FLTK_HEADER "${FLTK_HEADER}")
+        vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/FL/${FILE}" "defined(FL_DLL)" "0")
     else()
-        string(REPLACE "defined(FL_DLL)" "1" FLTK_HEADER "${FLTK_HEADER}")
+        vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/FL/${FILE}" "defined(FL_DLL)" "1")
     endif()
-    file(WRITE ${CURRENT_PACKAGES_DIR}/include/FL/${FILE} "${FLTK_HEADER}")
 endforeach()
 
-file(INSTALL
-    ${SOURCE_PATH}/COPYING
-    DESTINATION ${CURRENT_PACKAGES_DIR}/share/fltk
-    RENAME copyright
-)
+vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/share/fltk/UseFLTK.cmake" "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel;${SOURCE_PATH}" [[${CMAKE_CURRENT_LIST_DIR}/../../include]])
+
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

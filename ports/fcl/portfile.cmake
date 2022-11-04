@@ -1,53 +1,41 @@
-include(vcpkg_common_functions)
+vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
-if (VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    message(STATUS "Warning: Dynamic building not supported yet. Building static.")
-    set(VCPKG_LIBRARY_LINKAGE static)
-endif()
-
-vcpkg_from_github( 
-    OUT_SOURCE_PATH SOURCE_PATH 
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
     REPO flexible-collision-library/fcl
-    REF 54e9619bc2b084ee50e986ac3308160d663481c4
-    SHA512 11bfa3fdeeda6766769a34d2248ca32b6b13ecb32b412c068aa1c7aa3495d55b3f7a82a93621965904f9813c3fd0f128a84f796ae5731d2ff15b85935a0e1261
-    HEAD_REF fcl-0.5 
-) 
-
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}
-    PATCHES
-        ${CMAKE_CURRENT_LIST_DIR}/0001_fix_package_detection.patch
-        ${CMAKE_CURRENT_LIST_DIR}/0002-fix_dependencies.patch)
-
-if(VCPKG_LIBRARY_LINKAGE STREQUAL static)
-    set(FCL_STATIC_LIBRARY ON)
-else()
-    set(FCL_STATIC_LIBRARY OFF)
-endif()
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
-    OPTIONS
-        -DFCL_STATIC_LIBRARY=${FCL_STATIC_LIBRARY}
-        -DFCL_BUILD_TESTS=OFF
+    REF 0.7.0
+    SHA512 95612476f4706fcd60812204ec7495a956c4e318cc6ace9526ac93dc765605ddf73b2d0d9ff9f4c9c739e43c5f8e24670113c86e02868a2949ab234c3bf82374
+    HEAD_REF master
 )
 
-vcpkg_install_cmake()
-vcpkg_copy_pdbs()
+string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" FCL_STATIC_LIBRARY)
 
-if(EXISTS ${CURRENT_PACKAGES_DIR}/CMake)
-  vcpkg_fixup_cmake_targets(CONFIG_PATH "CMake")
+if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64" OR VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
+    set(FCL_USE_X64_SSE ON)
 else()
-  vcpkg_fixup_cmake_targets(CONFIG_PATH "lib/cmake/fcl")
+    set(FCL_USE_X64_SSE OFF)
 endif()
 
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DCMAKE_DISABLE_FIND_PACKAGE_Doxygen=1
+        -DFCL_STATIC_LIBRARY=${FCL_STATIC_LIBRARY}
+        -DFCL_BUILD_TESTS=OFF
+        -DFCL_USE_X64_SSE=${FCL_USE_X64_SSE}
+)
 
-file(READ ${CURRENT_PACKAGES_DIR}/share/fcl/fclConfig.cmake FCL_CONFIG)
-string(REPLACE "unset(_expectedTargets)"
-               "unset(_expectedTargets)\n\nfind_package(octomap REQUIRED)\nfind_package(ccd REQUIRED)" FCL_CONFIG "${FCL_CONFIG}")
-file(WRITE ${CURRENT_PACKAGES_DIR}/share/fcl/fclConfig.cmake "${FCL_CONFIG}")
+vcpkg_cmake_install()
+vcpkg_copy_pdbs()
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
+if(EXISTS "${CURRENT_PACKAGES_DIR}/CMake")
+    vcpkg_cmake_config_fixup(CONFIG_PATH CMake)
+else()
+    vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/fcl)
+endif()
 
-file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/fcl RENAME copyright)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include" "${CURRENT_PACKAGES_DIR}/debug/share")
+
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
+
+vcpkg_fixup_pkgconfig()

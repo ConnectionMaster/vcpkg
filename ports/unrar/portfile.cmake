@@ -1,14 +1,9 @@
-include(vcpkg_common_functions)
-set(UNRAR_VERSION "5.5.8")
-set(UNRAR_SHA512 9eac83707fa47a03925e5f3e8adf47889064d748304b732d12a2d379ab525b441f1aa33216377d4ef445f45c4e8ad73d2cd0b560601ceac344c60571b77fd6aa)
+set(UNRAR_VERSION "6.1.7")
+set(UNRAR_SHA512 b1a95358ff66b0e049597bbc4e1786d0bc909a8aff4aca94ee793d0d5a3c8b052eb347d88f44b6bc2e6231e777f1b711c198711118ae9ffbe8db2f72e7fbe846)
 set(UNRAR_FILENAME unrarsrc-${UNRAR_VERSION}.tar.gz)
-set(UNRAR_URL http://www.rarlab.com/rar/${UNRAR_FILENAME})
-set(SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/unrar)
+set(UNRAR_URL https://www.rarlab.com/rar/${UNRAR_FILENAME})
 
-if (VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    message(STATUS "Unrar buildsystem doesn't support static building. Building dynamic instead.")
-    set(VCPKG_LIBRARY_LINKAGE dynamic)
-endif()
+vcpkg_check_linkage(ONLY_DYNAMIC_LIBRARY)
 
 #SRC
 vcpkg_download_distfile(ARCHIVE
@@ -16,7 +11,12 @@ vcpkg_download_distfile(ARCHIVE
     FILENAME ${UNRAR_FILENAME}
     SHA512 ${UNRAR_SHA512}
 )
-vcpkg_extract_source_archive(${ARCHIVE})
+vcpkg_extract_source_archive_ex(
+    OUT_SOURCE_PATH SOURCE_PATH
+    ARCHIVE ${ARCHIVE}
+    REF ${UNRAR_VERSION}
+    PATCHES msbuild-use-default-sma.patch
+)
 
 vcpkg_build_msbuild(
     PROJECT_PATH "${SOURCE_PATH}/UnRARDll.vcxproj"
@@ -26,15 +26,17 @@ vcpkg_build_msbuild(
 )
 
 #INCLUDE (named dll.hpp in source, and unrar.h in all rarlabs distributions)
-file(INSTALL ${SOURCE_PATH}/dll.hpp DESTINATION ${CURRENT_PACKAGES_DIR}/include RENAME unrar.h)
+file(INSTALL "${SOURCE_PATH}/dll.hpp" DESTINATION "${CURRENT_PACKAGES_DIR}/include" RENAME unrar.h)
 
 #DLL & LIB
-file(INSTALL ${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel/unrar.dll  DESTINATION ${CURRENT_PACKAGES_DIR}/bin)
-file(INSTALL ${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel/unrar.lib  DESTINATION ${CURRENT_PACKAGES_DIR}/lib)
-file(INSTALL ${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg/unrar.dll  DESTINATION ${CURRENT_PACKAGES_DIR}/debug/bin)
-file(INSTALL ${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg/unrar.lib  DESTINATION ${CURRENT_PACKAGES_DIR}/debug/lib)
+file(INSTALL "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel/unrar.dll"  DESTINATION "${CURRENT_PACKAGES_DIR}/bin")
+file(INSTALL "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel/unrar.lib"  DESTINATION "${CURRENT_PACKAGES_DIR}/lib")
+file(INSTALL "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg/unrar.dll"  DESTINATION "${CURRENT_PACKAGES_DIR}/debug/bin")
+file(INSTALL "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-dbg/unrar.lib"  DESTINATION "${CURRENT_PACKAGES_DIR}/debug/lib")
 
 vcpkg_copy_pdbs()
 
+configure_file("${CMAKE_CURRENT_LIST_DIR}/Config.cmake.in" "${CURRENT_PACKAGES_DIR}/share/unofficial-unrar/unofficial-unrar-config.cmake" @ONLY)
+
 #COPYRIGHT
-file(INSTALL ${SOURCE_PATH}/LICENSE.txt DESTINATION ${CURRENT_PACKAGES_DIR}/share/unrar RENAME copyright)
+file(INSTALL "${SOURCE_PATH}/LICENSE.txt" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

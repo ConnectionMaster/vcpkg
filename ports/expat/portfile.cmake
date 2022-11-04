@@ -1,47 +1,47 @@
-if(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-message(FATAL_ERROR "${PORT} does not currently support UWP")
-endif()
+file(READ ${CMAKE_CURRENT_LIST_DIR}/vcpkg.json vcpkg_json)
+string(JSON VERSION GET "${vcpkg_json}" "version")
 
-include(vcpkg_common_functions)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO libexpat/libexpat
-    REF R_2_2_6
-    SHA512 727fbd24041c9af71b32353448583a6d8b38ddf93b10c97510e847939c2ad2be9b40ff6e6e27b725bff277982c2fc96c75f19c4a3ac4a246133eb62870c963d8
-    HEAD_REF master)
-
-if(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    set(EXPAT_LINKAGE ON)
-else()
-    set(EXPAT_LINKAGE OFF)
-endif()
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}/expat
-    PREFER_NINJA
-    OPTIONS
-        -DBUILD_examples=OFF
-        -DBUILD_tests=OFF
-        -DBUILD_tools=OFF
-        -DBUILD_shared=${EXPAT_LINKAGE}
+    REF R_2_4_9
+    SHA512 6bf92516ce2642b2cdcbc586aaac0f706f125394fa428670f9b8b042a1f393e3b9dda1a24e58e6c8ad8b4ff3303cb5a8700628c6c04a881a06251c08be3759d3
+    HEAD_REF master
+    PATCHES
+        "pkgconfig_fix.patch" # https://github.com/libexpat/libexpat/pull/656
+        "mingw_static_fix.patch" # https://github.com/libexpat/libexpat/pull/658
 )
 
-vcpkg_install_cmake()
+string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" EXPAT_LINKAGE)
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include ${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig ${CURRENT_PACKAGES_DIR}/lib/pkgconfig)
-file(INSTALL ${SOURCE_PATH}/expat/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/expat RENAME copyright)
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}/expat"
+    OPTIONS
+        -DEXPAT_BUILD_EXAMPLES=OFF
+        -DEXPAT_BUILD_TESTS=OFF
+        -DEXPAT_BUILD_TOOLS=OFF
+        -DEXPAT_BUILD_DOCS=OFF
+        -DEXPAT_SHARED_LIBS=${EXPAT_LINKAGE}
+        -DEXPAT_BUILD_PKGCONFIG=ON
+)
+
+vcpkg_cmake_install()
+
+vcpkg_cmake_config_fixup(CONFIG_PATH "lib/cmake/expat-${VERSION}")
+vcpkg_fixup_pkgconfig()
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/share/doc")
+
+if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/expat_external.h"
+        "! defined(XML_STATIC)"
+        "/* vcpkg static build ! defined(XML_STATIC) */ 0"
+    )
+endif()
 
 vcpkg_copy_pdbs()
 
-# CMake's FindExpat currently doesn't look for expatd.lib
-if(EXISTS ${CURRENT_PACKAGES_DIR}/debug/lib/expatd.lib)
-    file(RENAME ${CURRENT_PACKAGES_DIR}/debug/lib/expatd.lib ${CURRENT_PACKAGES_DIR}/debug/lib/expat.lib)
-endif()
-
-file(READ ${CURRENT_PACKAGES_DIR}/include/expat_external.h EXPAT_EXTERNAL_H)
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    string(REPLACE "!defined(XML_STATIC)" "/* vcpkg static build !defined(XML_STATIC) */ 0" EXPAT_EXTERNAL_H "${EXPAT_EXTERNAL_H}")
-endif()
-file(WRITE ${CURRENT_PACKAGES_DIR}/include/expat_external.h "${EXPAT_EXTERNAL_H}")
-
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/usage DESTINATION ${CURRENT_PACKAGES_DIR}/share/expat)
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/vcpkg-cmake-wrapper.cmake" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
+file(INSTALL "${SOURCE_PATH}/expat/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

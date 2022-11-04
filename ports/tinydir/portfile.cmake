@@ -1,11 +1,9 @@
-include(vcpkg_common_functions)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO cxong/tinydir
-    REF 1.2.3
-    SHA512 fa366525558b0932994f93bab7a9edafdc7fe297fc65c2ce8af5b4b05c33c4af4b1fdf72292a7a89dcea4276cf419e3569e41ff1122e0048ad467ed6e33836a2
+    REF 1.2.5
+    SHA512 d86a8709b92c9b6847bd85b4b307a411edf30156a06557641a051f74a7c19898451616772ee53ad2d8fc6c2ea2285c4c4edf2197f36cf48ede6d539d24ebb2cf
     HEAD_REF master
 )
-file(INSTALL ${SOURCE_PATH}/tinydir.h DESTINATION ${CURRENT_PACKAGES_DIR}/include)
-file(INSTALL ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/tinydir RENAME copyright)
-vcpkg_copy_pdbs()
+file(INSTALL "${SOURCE_PATH}/tinydir.h" DESTINATION "${CURRENT_PACKAGES_DIR}/include")
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/tinydir" RENAME copyright)

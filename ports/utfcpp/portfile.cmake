@@ -1,15 +1,28 @@
-#header-only library
-include(vcpkg_common_functions)
-set(SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/utfcpp-2.3.5)
-vcpkg_download_distfile(ARCHIVE_FILE
-    URLS "https://github.com/nemtrif/utfcpp/archive/v2.3.5.tar.gz"
-    FILENAME "utfcpp-2.3.5.tar.gz"
-    SHA512 d5e672de952b78a78a8af0c81664f15667b30558fd406a9abc72c14dc444e0869e7c02cb66fa017ec0e760c0fb23c3e923a4b171c2acb3ed7b71612783e789ee
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO nemtrif/utfcpp
+    REF v3.2.1
+    SHA512 5798487f12b1bc55d3e06aed38f7604271ca3402963efcf85d181fd590d8a088d21e961e77698e60dc2cdae8cf4506645903442c45fd328201752d9589180e0d
+    HEAD_REF master
 )
-vcpkg_extract_source_archive(${ARCHIVE_FILE})
 
-# Put the licence file where vcpkg expects it
-file(INSTALL ${SOURCE_PATH}/source/utf8.h DESTINATION ${CURRENT_PACKAGES_DIR}/share/utfcpp RENAME copyright)
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DUTF8_INSTALL=ON
+        -DUTF8_SAMPLES=OFF
+        -DUTF8_TESTS=OFF
+)
 
-# Copy the utf8-cpp header files
-file(COPY ${SOURCE_PATH}/source/ DESTINATION ${CURRENT_PACKAGES_DIR}/include)
+vcpkg_cmake_install()
+
+if (VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
+    vcpkg_cmake_config_fixup(PACKAGE_NAME utf8cpp CONFIG_PATH cmake)
+else()
+    vcpkg_cmake_config_fixup(PACKAGE_NAME utf8cpp CONFIG_PATH lib/cmake/utf8cpp)
+endif()
+
+# Header only
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug" "${CURRENT_PACKAGES_DIR}/lib")
+
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

@@ -1,5 +1,3 @@
-include(vcpkg_common_functions)
-
 if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
     message("parson only supports static linkage")
     set(VCPKG_LIBRARY_LINKAGE "static")
@@ -8,8 +6,8 @@ endif()
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO kgabis/parson
-    REF 302fba9cbb31ffc523bf10a1ce705040194c289d
-    SHA512 ecc1594fe6e27b8919ccdaf3c7e082d0d47aa5e20aec52235762b9cab8e371adec5a1760f4ea36405bf97cfb587d2bcbd81221f97a9d39290673e2ce61f5a49f
+    REF 102a4467e10c77ffcfde1d233798780acd719cc5 # accessed on 2020-09-14
+    SHA512 8498e667525a0f08881c4041877194bf68926af34c9f0cbd9fd3d9538c31e0ad1ab1c083fbee48423f4ffd99f46e25918928c43585206237c8f723e5e47b17b7
     HEAD_REF master
 )
 

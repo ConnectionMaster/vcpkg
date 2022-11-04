@@ -1,33 +1,26 @@
-# ATK uses DllMain
-if (VCPKG_LIBRARY_LINKAGE STREQUAL "static" OR VCPKG_CRT_LINKAGE STREQUAL "static")
-    message(FATAL_ERROR "ATK only supports dynamic library and crt linkage")
-endif()
+set(ATK_VERSION 2.38.0)
 
-include(vcpkg_common_functions)
-set(ATK_VERSION 2.24.0)
-set(SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/atk-${ATK_VERSION})
-vcpkg_download_distfile(ARCHIVE
-    URLS "http://ftp.gnome.org/pub/GNOME/sources/atk/2.24/atk-${ATK_VERSION}.tar.xz"
-    FILENAME "atk-${ATK_VERSION}.tar.xz"
-    SHA512 3ae0a4d5f28d5619d465135c685161f690732053bcb70a47669c951fbf389b5d2ccc5c7c73d4ee8c5a3b2df14e2f5b082e812a215f10a79b27b412d077f5e962)
+vcpkg_from_gitlab(
+    GITLAB_URL https://gitlab.gnome.org/
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO GNOME/atk
+    REF "${ATK_VERSION}"
+    HEAD_REF master
+    SHA512 f31951ecbdace6a18fb9f772616137cb8732163b37448fef4daf1af60ba8479c94d498dcdaf4880468c80012c77a446da585926a99704a9a940b80e546080cf3
+)
 
-vcpkg_extract_source_archive(${ARCHIVE})
-vcpkg_apply_patches(SOURCE_PATH ${SOURCE_PATH}/atk
-    PATCHES
-        ${CMAKE_CURRENT_LIST_DIR}/fix-encoding.patch)
+vcpkg_configure_meson(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS -Dintrospection=false
+    ADDITIONAL_NATIVE_BINARIES glib-genmarshal='${CURRENT_HOST_INSTALLED_DIR}/tools/glib/glib-genmarshal'
+                               glib-mkenums='${CURRENT_HOST_INSTALLED_DIR}/tools/glib/glib-mkenums'
+    ADDITIONAL_CROSS_BINARIES  glib-genmarshal='${CURRENT_HOST_INSTALLED_DIR}/tools/glib/glib-genmarshal'
+                               glib-mkenums='${CURRENT_HOST_INSTALLED_DIR}/tools/glib/glib-mkenums'
+)
+vcpkg_install_meson()
 
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
-    OPTIONS
-        -DCMAKE_PROGRAM_PATH=${CURRENT_INSTALLED_DIR}/tools/glib
-    OPTIONS_DEBUG
-        -DATK_SKIP_HEADERS=ON)
-
-vcpkg_install_cmake()
 vcpkg_copy_pdbs()
 
-file(COPY ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/atk)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/atk/COPYING ${CURRENT_PACKAGES_DIR}/share/atk/copyright)
+vcpkg_fixup_pkgconfig()
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

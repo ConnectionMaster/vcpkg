@@ -1,56 +1,73 @@
-include(vcpkg_common_functions)
+vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
-if (VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-    message(STATUS "Warning: Dynamic building not supported yet. Building static.")
-    set(VCPKG_LIBRARY_LINKAGE static)
-endif()
-
-if(NOT VCPKG_CRT_LINKAGE STREQUAL "dynamic")
-  message(FATAL_ERROR "DirectXTK only supports dynamic CRT linkage")
+if(VCPKG_TARGET_IS_MINGW)
+    message(NOTICE "Building ${PORT} for MinGW requires the HLSL Compiler fxc.exe also be in the PATH. See https://aka.ms/windowssdk.")
 endif()
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO Microsoft/DirectXTK
-    REF nov2018
-    SHA512 ee696245c914c1ede99c12d301e15f3d70ae7a0375b6c6f94afcbb1fd1a80844d1cd053a87f66c2008394a1b8f1165db0e835344a0311f0a8418c32aff9f592a
-    HEAD_REF master
+    REF jul2022
+    SHA512 1f16d682e2ed7d177ec7ab0f5ecbcfd11f85478eff52db781403c6c1dca8945521da3a5fd926ea46a4d319c94bc0f21eacea7b456da4283ccac21614e3338f58
+    HEAD_REF main
 )
 
-IF (TRIPLET_SYSTEM_ARCH MATCHES "x86")
-    SET(BUILD_ARCH "Win32")
-ELSE()
-    SET(BUILD_ARCH ${TRIPLET_SYSTEM_ARCH})
-ENDIF()
-
-vcpkg_build_msbuild(
-    PROJECT_PATH ${SOURCE_PATH}/DirectXTK_Desktop_2017.sln
-    PLATFORM ${BUILD_ARCH}
+vcpkg_check_features(
+    OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        xaudio2-9 BUILD_XAUDIO_WIN10
+        xaudio2-8 BUILD_XAUDIO_WIN8
+        xaudio2redist BUILD_XAUDIO_WIN7
 )
 
-file(INSTALL
-    ${SOURCE_PATH}/Bin/Desktop_2017/${BUILD_ARCH}/Release/DirectXTK.lib
-    DESTINATION ${CURRENT_PACKAGES_DIR}/lib)
+if(VCPKG_TARGET_IS_UWP)
+  set(EXTRA_OPTIONS -DBUILD_TOOLS=OFF)
+else()
+  set(EXTRA_OPTIONS -DBUILD_TOOLS=ON)
+endif()
 
-file(INSTALL
-    ${SOURCE_PATH}/Bin/Desktop_2017/${BUILD_ARCH}/Debug/DirectXTK.lib
-    DESTINATION ${CURRENT_PACKAGES_DIR}/debug/lib)
-
-set(DXTK_TOOL_PATH ${CURRENT_PACKAGES_DIR}/tools/directxtk)
-file(MAKE_DIRECTORY ${DXTK_TOOL_PATH})
-
-file(INSTALL
-    ${SOURCE_PATH}/MakeSpriteFont/bin/Release/MakeSpriteFont.exe
-    DESTINATION ${DXTK_TOOL_PATH})
-
-file(INSTALL
-    ${SOURCE_PATH}/XWBTool/Bin/Desktop_2017/${BUILD_ARCH}/Release/XWBTool.exe
-    DESTINATION ${DXTK_TOOL_PATH})
-
-file(INSTALL
-    ${SOURCE_PATH}/Inc/
-    DESTINATION ${CURRENT_PACKAGES_DIR}/include/DirectXTK
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS ${FEATURE_OPTIONS} ${EXTRA_OPTIONS}
 )
 
-# Handle copyright
-file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/directxtk RENAME copyright)
+vcpkg_cmake_install()
+vcpkg_cmake_config_fixup(CONFIG_PATH share/directxtk)
+
+if((VCPKG_HOST_IS_WINDOWS) AND (VCPKG_TARGET_ARCHITECTURE MATCHES x64))
+  vcpkg_download_distfile(
+    MAKESPRITEFONT_EXE
+    URLS "https://github.com/Microsoft/DirectXTK/releases/download/jul2022/MakeSpriteFont.exe"
+    FILENAME "makespritefont-jul2022.exe"
+    SHA512 fd039070fad3dee3fe146d2cd4950f599f680cb4abd370e7c21bedeb8c0a970455ad2eac463fc6d198505b6bbdabebfcc453bf74c317f6a10bf2e2f9a0bfc418
+  )
+
+  vcpkg_download_distfile(
+    XWBTOOL_EXE
+    URLS "https://github.com/Microsoft/DirectXTK/releases/download/jul2022/XWBTool.exe"
+    FILENAME "xwbtool-jul2022.exe"
+    SHA512 6276e17241afc8c0b82789b99667577394eedf001fa2d4b3acdfac847744c3ac5ec9a8072a1e3e9f247386711232aab93f066a0689f4f9f7d84744dc3862ea05
+  )
+
+  file(MAKE_DIRECTORY "${CURRENT_PACKAGES_DIR}/tools/directxtk/")
+
+  file(INSTALL
+    ${MAKESPRITEFONT_EXE}
+    ${XWBTOOL_EXE}
+    DESTINATION "${CURRENT_PACKAGES_DIR}/tools/directxtk/")
+
+  file(RENAME "${CURRENT_PACKAGES_DIR}/tools/directxtk/makespritefont-jul2022.exe" "${CURRENT_PACKAGES_DIR}/tools/directxtk/makespritefont.exe")
+  file(RENAME "${CURRENT_PACKAGES_DIR}/tools/directxtk/xwbtool-jul2022.exe" "${CURRENT_PACKAGES_DIR}/tools/directxtk/xwbtool.exe")
+
+elseif(NOT VCPKG_TARGET_IS_UWP)
+
+  vcpkg_copy_tools(
+        TOOL_NAMES XWBTool
+        SEARCH_DIR "${CURRENT_BUILDTREES_DIR}/${TARGET_TRIPLET}-rel/bin/CMake"
+    )
+
+endif()
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

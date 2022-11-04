@@ -1,53 +1,63 @@
-include(vcpkg_common_functions)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO facebook/zstd
-    REF v1.3.7
-    SHA512 b7a432b13e237ac1490cd82b87727f6a4385d5ea7b89f566dea61a3993e17909c03288f727326ada326e36eb47ea5f9eab67c097808ee42f52cc800a7f7e1738
+    REF f4a552a3fa24d9078f84157bd40e4f1bad49c488 #v1.5.2
+    SHA512 5e0343cfc06d756c3f09647df39f1c15b39707c0b9b6d343b1be8f1e99d567b52f5b9228925c2190d1600a5b54822c2a4546b2443b13f43eb9a75f97e7fa41f5
     HEAD_REF dev
-    PATCHES enable-debug-mode.patch
+    PATCHES
+        install_pkgpc.patch
+        no-static-suffix.patch
 )
 
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    set(ZSTD_STATIC 1)
-    set(ZSTD_SHARED 0)
-else()
-    set(ZSTD_STATIC 0)
-    set(ZSTD_SHARED 1)
-endif()
+string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" ZSTD_BUILD_STATIC)
+string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" ZSTD_BUILD_SHARED)
 
-if(VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore" OR NOT VCPKG_CMAKE_SYSTEM_NAME)
-    # Enable multithreaded mode. CMake build doesn't provide a multithreaded
-    # library target, but it is the default in Makefile and VS projects.
-    set(VCPKG_C_FLAGS "${VCPKG_C_FLAGS} -DZSTD_MULTITHREAD")
-    set(VCPKG_CXX_FLAGS "${VCPKG_CXX_FLAGS}")
-endif()
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}/build/cmake
-    PREFER_NINJA
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}/build/cmake"
     OPTIONS
-        -DZSTD_BUILD_SHARED=${ZSTD_SHARED}
-        -DZSTD_BUILD_STATIC=${ZSTD_STATIC}
+        -DZSTD_BUILD_SHARED=${ZSTD_BUILD_SHARED}
+        -DZSTD_BUILD_STATIC=${ZSTD_BUILD_STATIC}
         -DZSTD_LEGACY_SUPPORT=1
         -DZSTD_BUILD_PROGRAMS=0
         -DZSTD_BUILD_TESTS=0
         -DZSTD_BUILD_CONTRIB=0
-    OPTIONS_DEBUG
-        -DCMAKE_DEBUG_POSTFIX=d)
+        -DZSTD_MULTITHREAD_SUPPORT=1
+)
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
 vcpkg_copy_pdbs()
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include ${CURRENT_PACKAGES_DIR}/debug/share)
+vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/zstd)
+vcpkg_fixup_pkgconfig()
 
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
-    foreach(HEADER zdict.h zstd.h zstd_errors.h)
-        file(READ ${CURRENT_PACKAGES_DIR}/include/${HEADER} HEADER_CONTENTS)
-        string(REPLACE "defined(ZSTD_DLL_IMPORT) && (ZSTD_DLL_IMPORT==1)" "1" HEADER_CONTENTS "${HEADER_CONTENTS}")
-        file(WRITE ${CURRENT_PACKAGES_DIR}/include/${HEADER} "${HEADER_CONTENTS}")
+file(READ "${CURRENT_PACKAGES_DIR}/share/zstd/zstdTargets.cmake" targets)
+if(targets MATCHES "-pthread")
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/lib/pkgconfig/libzstd.pc" " -lzstd" " -lzstd -pthread")
+    if(NOT VCPKG_BUILD_TYPE)
+        vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig/libzstd.pc" " -lzstd" " -lzstd -pthread")
+    endif()
+endif()
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include" "${CURRENT_PACKAGES_DIR}/debug/share")
+
+if(VCPKG_TARGET_IS_WINDOWS AND VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
+    foreach(HEADER IN ITEMS zdict.h zstd.h zstd_errors.h)
+        vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/${HEADER}" "defined(ZSTD_DLL_IMPORT) && (ZSTD_DLL_IMPORT==1)" "1" )
     endforeach()
 endif()
 
-file(COPY ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/zstd)
-file(COPY ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/zstd)
-file(WRITE ${CURRENT_PACKAGES_DIR}/share/zstd/copyright "ZSTD is dual licensed - see LICENSE and COPYING files\n")
+if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
+    set(missing_target zstd::libzstd_static)
+    set(existing_target zstd::libzstd_shared)
+else()
+    set(existing_target zstd::libzstd_static)
+    set(missing_target zstd::libzstd_shared)
+endif()
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/zstd/zstdTargets-interface.cmake" "
+add_library(${missing_target} IMPORTED INTERFACE)
+set_target_properties(${missing_target} PROPERTIES INTERFACE_LINK_LIBRARIES ${existing_target})
+")
+
+file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
+file(READ "${SOURCE_PATH}/LICENSE" bsd)
+file(READ "${SOURCE_PATH}/COPYING" gpl)
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/${PORT}/copyright" "ZSTD is dual licensed under BSD and GPLv2.\n\n${bsd}\n\n${gpl}")

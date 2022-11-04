@@ -1,32 +1,34 @@
-include(vcpkg_common_functions)
+if(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
+    set(ADDITIONAL_PATCH "shared.patch")
+endif()
 
-vcpkg_from_github( 
-    OUT_SOURCE_PATH SOURCE_PATH 
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
     REPO mm2/Little-CMS
-    REF lcms2.8
-    SHA512 22ee94aa3333db4248607d8aa84343d324e04b30c154c46672c6f668e14a369b9b72f2557b8465218b6e9a2676cf8fa37d617b4aa13a013dc2337197a599e63a
+    REF 924a020d09bfe468c665467caf24aadeb41ff77c # 2.12
+    SHA512 0c2dc069878ca38a92af4800aa3fb2660203fbcdf6dccd9db60cfacb6896185e3e9222893f39ec3e132b0f4900a2932d490dd8db5b1b431519966a64d28404d2
     HEAD_REF master
-    PATCHES "${CMAKE_CURRENT_LIST_DIR}/remove_library_directive.patch"
-) 
-
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
-
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
-    OPTIONS_DEBUG
-        -DSKIP_INSTALL_HEADERS=ON
+    PATCHES
+        remove_library_directive.patch
+        ${ADDITIONAL_PATCH}
+        cpp17.patch
 )
 
-vcpkg_install_cmake()
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt" DESTINATION "${SOURCE_PATH}")
 
-file(INSTALL ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/lcms RENAME copyright)
+vcpkg_cmake_configure(SOURCE_PATH "${SOURCE_PATH}")
+vcpkg_cmake_install()
 
 vcpkg_copy_pdbs()
+vcpkg_cmake_config_fixup(PACKAGE_NAME lcms2)
+vcpkg_cmake_config_fixup() # provides old PACKAGE_NAME lcms
+vcpkg_fixup_pkgconfig()
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/lcms/lcms-config.cmake" [[
+include(CMakeFindDependencyMacro)
+find_dependency(lcms2 CONFIG)
+include(${CMAKE_CURRENT_LIST_DIR}/lcms-targets.cmake)
+]])
 
-#patch header files to fix import/export issues
-if(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
-  vcpkg_apply_patches(
-    SOURCE_PATH ${CURRENT_PACKAGES_DIR}/include
-    PATCHES "${CMAKE_CURRENT_LIST_DIR}/shared.patch")
-endif()
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
+file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")

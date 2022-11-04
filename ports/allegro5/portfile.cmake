@@ -1,44 +1,25 @@
-# Common Ambient Variables:
-#   CURRENT_BUILDTREES_DIR    = ${VCPKG_ROOT_DIR}\buildtrees\${PORT}
-#   CURRENT_PACKAGES_DIR      = ${VCPKG_ROOT_DIR}\packages\${PORT}_${TARGET_TRIPLET}
-#   CURRENT_PORT_DIR          = ${VCPKG_ROOT_DIR}\ports\${PORT}
-#   PORT                      = current port name (zlib, etc)
-#   TARGET_TRIPLET            = current triplet (x86-windows, x64-windows-static, etc)
-#   VCPKG_CRT_LINKAGE         = C runtime linkage type (static, dynamic)
-#   VCPKG_LIBRARY_LINKAGE     = target library linkage type (static, dynamic)
-#   VCPKG_ROOT_DIR            = <C:\path\to\current\vcpkg>
-#   VCPKG_TARGET_ARCHITECTURE = target architecture (x64, x86, arm)
-#
-
-include(vcpkg_common_functions)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO liballeg/allegro5
-    REF 5.2.4.0
-    SHA512 46a7c7b65ffb49ae5c81e5a33d850b4ae94b59135fc9b15174ffe86133445ff328c623c2c48298d3f631cc6310d51f4f3f07b8b952ecbd360755001292cbda8b
+    REF 5.2.6.0
+    SHA512 d590c1a00d1b314c6946e0f6ad3e3a8b6e6309bada2ec38857186f817147ac99dae8a1c4412abe701af88da5dca3dd8f989a1da66630192643d3c08c0146b603
     HEAD_REF master
-)
-
-if (VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
-    set(ALLEGRO_USE_STATIC ON)
-else()
-    set(ALLEGRO_USE_STATIC OFF)
-endif()
-
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}
     PATCHES
-        ${CMAKE_CURRENT_LIST_DIR}/fix-pdb-install.patch
+        fix-pdb-install.patch
+        do-not-copy-pdbs-to-lib.patch
+        export-targets.patch
 )
 
-vcpkg_configure_cmake(
+
+string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" VCPKG_BUILD_SHARED_LIBS)
+
+vcpkg_cmake_configure(
     SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA # Disable this option if project cannot be built with Ninja
     OPTIONS
         -DWANT_DOCS=OFF
         -DALLEGRO_SDL=OFF
         -DWANT_DEMO=OFF
-        -DSHARED=${ALLEGRO_USE_STATIC}
+        -DSHARED=${VCPKG_BUILD_SHARED_LIBS}
         -DWANT_EXAMPLES=OFF
         -DWANT_CURL_EXAMPLE=OFF
         -DWANT_TESTS=OFF
@@ -79,16 +60,13 @@ vcpkg_configure_cmake(
     OPTIONS_DEBUG -DWANT_ALLOW_SSE=OFF
 )
 
-vcpkg_install_cmake()
-
-# Handle copyright
-file(COPY ${SOURCE_PATH}/LICENSE.txt DESTINATION ${CURRENT_PACKAGES_DIR}/share/allegro5)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/allegro5/LICENSE.txt ${CURRENT_PACKAGES_DIR}/share/allegro5/copyright)
-
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-
-file(GLOB PDB_GLOB ${CURRENT_BUILDTREES_DIR}-dbg/lib/*.pdb)
-file(MAKE_DIRECTORY ${CURRENT_BUILDTREES_DIR}-dbg/lib/Debug)
-file(COPY ${PDB_GLOB} DESTINATION ${CURRENT_BUILDTREES_DIR}-dbg/lib/Debug)
+vcpkg_cmake_install()
 
 vcpkg_copy_pdbs()
+
+vcpkg_cmake_config_fixup(PACKAGE_NAME unofficial-allegro5 CONFIG_PATH share/unofficial-allegro5)
+vcpkg_fixup_pkgconfig()
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share" "${CURRENT_PACKAGES_DIR}/debug/include")
+
+file(INSTALL "${SOURCE_PATH}/LICENSE.txt" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

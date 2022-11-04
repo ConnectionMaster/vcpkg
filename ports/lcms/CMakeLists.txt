@@ -1,66 +1,54 @@
 cmake_minimum_required(VERSION 3.5)
 
-project(lcms)
+project(little-cms)
 
-set(SRCS
-"src/cmstypes.c"
-"src/cmsvirt.c"
-"src/cmswtpnt.c"
-"src/cmsxform.c"
-"src/lcms2.def"
-"src/lcms2_internal.h"
-"src/cmsalpha.c"
-"src/cmscam02.c"
-"src/cmscgats.c"
-"src/cmscnvrt.c"
-"src/cmserr.c"
-"src/cmsgamma.c"
-"src/cmsgmt.c"
-"src/cmshalf.c"
-"src/cmsintrp.c"
-"src/cmsio0.c"
-"src/cmsio1.c"
-"src/cmslut.c"
-"src/cmsmd5.c"
-"src/cmsmtrx.c"
-"src/cmsnamed.c"
-"src/cmsopt.c"
-"src/cmspack.c"
-"src/cmspcs.c"
-"src/cmsplugin.c"
-"src/cmsps2.c"
-"src/cmssamp.c"
-"src/cmssm.c"
-)
+file(GLOB SRCS src/*.c)
 
-set(CMAKE_DEBUG_POSTFIX d)
-
-add_definitions(-DUNICODE -D_UNICODE)
+add_library(lcms2 ${SRCS} src/lcms2.def)
 
 if(BUILD_SHARED_LIBS)
-    add_definitions(-DCMS_DLL_BUILD)
+    target_compile_options(lcms2 PRIVATE -DCMS_DLL_BUILD)
+    target_compile_options(lcms2 PUBLIC -DCMS_DLL)
 endif()
+target_compile_options(lcms2 PRIVATE -DUNICODE -D_UNICODE)
 
-string(REPLACE "/utf-8" "" CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
+target_include_directories(lcms2 PUBLIC $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+set_target_properties(lcms2 PROPERTIES PUBLIC_HEADER "${CMAKE_CURRENT_LIST_DIR}/include/lcms2.h;${CMAKE_CURRENT_LIST_DIR}/include/lcms2_plugin.h")
 
-include_directories(
-"./include"
+# Generate pkg-config file
+SET(PACKAGE "lcms2")
+# Read VERSION from file configure
+file(READ "${CMAKE_CURRENT_LIST_DIR}/configure" lcms2_configure)
+string(REGEX MATCH "PACKAGE_VERSION='(([0-9]+)\\.([0-9]+))'" _ ${lcms2_configure})
+set(VERSION "${CMAKE_MATCH_1}")
+SET(prefix "${CMAKE_INSTALL_PREFIX}")
+SET(exec_prefix "\${prefix}")
+SET(libdir "\${exec_prefix}/${CMAKE_INSTALL_LIBDIR}")
+SET(includedir "\${prefix}/include")
+CONFIGURE_FILE(lcms2.pc.in "${PROJECT_BINARY_DIR}/lcms2.pc" @ONLY)
+
+install(TARGETS lcms2
+    EXPORT lcms2Config
+    RUNTIME DESTINATION "bin"
+    LIBRARY DESTINATION "lib"
+    ARCHIVE DESTINATION "lib"
+    PUBLIC_HEADER DESTINATION "include"
 )
 
-add_library(lcms2 ${SRCS})
+INSTALL(FILES ${PROJECT_BINARY_DIR}/lcms2.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 
-if(NOT SKIP_INSTALL_HEADERS )
+install(EXPORT lcms2Config
+    DESTINATION "share/lcms2"
+    NAMESPACE lcms2::
+)
 
-  install(FILES 
-    "./include/lcms2.h" 
-    "./include/lcms2_plugin.h"
-    DESTINATION include
-	)
+# Backwards compatibility for previous vcpkg users
+add_library(lcms INTERFACE)
+target_link_libraries(lcms INTERFACE lcms2)
 
-endif(NOT SKIP_INSTALL_HEADERS )
 
-install(TARGETS lcms2 EXPORT lcms_EXPORT    
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib
-    ARCHIVE DESTINATION lib
+install(TARGETS lcms EXPORT lcms-targets)
+install(EXPORT lcms-targets
+    DESTINATION "share/lcms"
+    NAMESPACE lcms::
 )

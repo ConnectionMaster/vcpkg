@@ -1,93 +1,74 @@
-
-if (EXISTS "${CURRENT_INSTALLED_DIR}/share/libmysql")
+if(EXISTS "${CURRENT_INSTALLED_DIR}/share/libmysql")
     message(FATAL_ERROR "FATAL ERROR: libmysql and libmariadb are incompatible.")
 endif()
 
-include(vcpkg_common_functions)
+if("openssl" IN_LIST FEATURES AND "schannel" IN_LIST FEATURES)
+    message(FATAL_ERROR "Only one SSL backend must be selected.")
+endif()
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
-    REPO MariaDB/mariadb-connector-c
-    REF v3.0.2
-    SHA512 a5086ff149b1ca0e1b652013475c5f3793824416a60ec35018b6dcd502bd38b50fa040271ff8d308520dadecc9601671fccf67046fcda2425f1d7c59e1c6c52f
-    HEAD_REF master
-    PATCHES md.patch
+    REPO mariadb-corporation/mariadb-connector-c
+    REF 5e94e7c27ffad7e76665b1333a67975316b9c3c2 # v3.3.1
+    SHA512 0f740f88f64037990bf9d4593574b147ee02adb1fbbeb03c0dec745f0ee27d7cf03417dd09546ab70e16b4465622b8567864dbb243de0a3a7ffaebe313f7c231
+    HEAD_REF 3.3
+    PATCHES
+        md.patch
+        disable-test-build.patch
+        fix-InstallPath.patch
+        fix-iconv.patch
+        pkgconfig.patch
+        fix-openssl.patch
+        fix-CMakeLists.patch
+        zstd.patch
 )
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    OPTIONS
-        -DWITH_UNITTEST=OFF
-        -DWITH_SSL=OFF
-        -DWITH_CURL=OFF
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        iconv            WITH_ICONV
+        mariadbclient    VCPKG_MARIADBCLIENT
+        zstd             WITH_ZSTD
 )
 
-vcpkg_install_cmake()
-
-if(NOT DEFINED VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "release")
-    # remove debug header
-    file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-endif()
-
-if(VCPKG_BUILD_TYPE STREQUAL "debug")
-    # move headers
-    file(RENAME
-        ${CURRENT_PACKAGES_DIR}/debug/include
-        ${CURRENT_PACKAGES_DIR}/include)
-endif()
-
-# fix libmariadb lib & dll directory.
-if (VCPKG_LIBRARY_LINKAGE STREQUAL static)
-    if(NOT DEFINED VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "release")
-        file(RENAME
-            ${CURRENT_PACKAGES_DIR}/lib/mariadb/mariadbclient.lib
-            ${CURRENT_PACKAGES_DIR}/lib/mariadbclient.lib)
-    endif()
-
-    if(NOT DEFINED VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "debug")
-        file(RENAME
-            ${CURRENT_PACKAGES_DIR}/debug/lib/mariadb/mariadbclient.lib
-            ${CURRENT_PACKAGES_DIR}/debug/lib/mariadbclient.lib)
-    endif()
+if("openssl" IN_LIST FEATURES)
+    set(WITH_SSL OPENSSL)
+elseif("schannel" IN_LIST FEATURES)
+    set(WITH_SSL ON)
 else()
-    if(NOT DEFINED VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "release")
-        file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/bin)
-        file(RENAME
-            ${CURRENT_PACKAGES_DIR}/lib/mariadb/libmariadb.dll
-            ${CURRENT_PACKAGES_DIR}/bin/libmariadb.dll)
-        file(RENAME
-            ${CURRENT_PACKAGES_DIR}/lib/mariadb/libmariadb.lib
-            ${CURRENT_PACKAGES_DIR}/lib/libmariadb.lib)
-    endif()
+    set(WITH_SSL OFF)
+endif()
 
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        ${FEATURE_OPTIONS}
+        -DINSTALL_INCLUDEDIR=include/mysql # legacy port decisiong
+        -DINSTALL_LIBDIR=lib
+        -DINSTALL_PLUGINDIR=plugins/${PORT}
+        -DWITH_UNIT_TESTS=OFF
+        -DWITH_CURL=OFF
+        -DWITH_EXTERNAL_ZLIB=ON
+        -DWITH_SSL=${WITH_SSL}
+        -DREMOTEIO_PLUGIN_TYPE=OFF
+        -DAUTH_GSSAPI_PLUGIN_TYPE=OFF
+        -DWITH_ZSTD=${WITH_ZSTD}
+    MAYBE_UNUSED_VARIABLES
+        AUTH_GSSAPI_PLUGIN_TYPE
+)
+
+vcpkg_cmake_install()
+
+vcpkg_cmake_config_fixup(PACKAGE_NAME unofficial-libmariadb)
+
+if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW)
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/lib/pkgconfig/libmariadb.pc" " -lmariadb" " -llibmariadb")
     if(NOT DEFINED VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "debug")
-        file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/debug/bin)
-        file(RENAME
-            ${CURRENT_PACKAGES_DIR}/debug/lib/mariadb/libmariadb.dll
-            ${CURRENT_PACKAGES_DIR}/debug/bin/libmariadb.dll)
-        file(RENAME
-            ${CURRENT_PACKAGES_DIR}/debug/lib/mariadb/libmariadb.lib
-            ${CURRENT_PACKAGES_DIR}/debug/lib/libmariadb.lib)
+        vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/debug/lib/pkgconfig/libmariadb.pc" " -lmariadb" " -llibmariadb")
     endif()
 endif()
 
-# remove plugin folder
-file(REMOVE_RECURSE
-    ${CURRENT_PACKAGES_DIR}/lib/plugin
-    ${CURRENT_PACKAGES_DIR}/debug/lib/plugin
-    ${CURRENT_PACKAGES_DIR}/lib/mariadb
-    ${CURRENT_PACKAGES_DIR}/debug/lib/mariadb)
+vcpkg_fixup_pkgconfig()
 
-# copy & remove header files
-file(REMOVE
-    ${CURRENT_PACKAGES_DIR}/include/mariadb/my_config.h.in
-    ${CURRENT_PACKAGES_DIR}/include/mariadb/mysql_version.h.in
-    ${CURRENT_PACKAGES_DIR}/include/mariadb/CMakeLists.txt
-    ${CURRENT_PACKAGES_DIR}/include/mariadb/Makefile.am)
-file(RENAME
-    ${CURRENT_PACKAGES_DIR}/include/mariadb
-    ${CURRENT_PACKAGES_DIR}/include/mysql)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
 
-# copy license file
-file(COPY ${SOURCE_PATH}/COPYING.LIB DESTINATION ${CURRENT_PACKAGES_DIR}/share/libmariadb)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/libmariadb/COPYING.LIB ${CURRENT_PACKAGES_DIR}/share/libmariadb/copyright)
+file(INSTALL "${SOURCE_PATH}/COPYING.LIB" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

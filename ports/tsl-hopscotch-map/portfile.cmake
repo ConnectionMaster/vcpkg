@@ -1,14 +1,13 @@
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO Tessil/hopscotch-map
-    REF v2.2.0
-    SHA512 a3cd0fe47ff16de6d556c24e0bd96e420c1f06f2e44388e4f223fd8cf30a6cf0af20ade46af46f8cb5bbfd86a0fce2ca65658999cc2c14f4998d949f12afff2f
+    REF 29030f55ca518bb1be5113ab0a8e134772024a9d # v2.3.0
+    SHA512 944f26fe0faa59b799ddf741c4f86b715934e740bfbb40a157f667eaff07013a35ad40a343b720b36279acefbb5b206a54cfcfec1f6cd052314936d19e5da413
 )
 
 vcpkg_configure_cmake(
     SOURCE_PATH ${SOURCE_PATH}
+    PREFER_NINJA
 )
 
 vcpkg_install_cmake()

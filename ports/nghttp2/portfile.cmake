@@ -1,50 +1,45 @@
-include(vcpkg_common_functions)
-
-set(LIB_NAME nghttp2)
-set(LIB_VERSION 1.35.0)
-
-set(LIB_FILENAME ${LIB_NAME}-${LIB_VERSION}.tar.gz)
-set(SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/${LIB_NAME}-${LIB_VERSION})
-
-vcpkg_download_distfile(ARCHIVE
-    URLS "https://github.com/nghttp2/nghttp2/releases/download/v${LIB_VERSION}/${LIB_FILENAME}"
-    FILENAME "${LIB_FILENAME}"
-    SHA512 65889545684e2c8b4aeeb7084ca36e3f78927fa2b6d1df906af3970d8ce6c7c6093b56a5e0713f7bb54a98f06ad52d6e2b323e760297610702afe526b0fdd577
-)
-vcpkg_extract_source_archive(${ARCHIVE})
-
-vcpkg_apply_patches(
-    SOURCE_PATH ${SOURCE_PATH}
-    PATCHES
-        "${CMAKE_CURRENT_LIST_DIR}/enable-static.patch"
+vcpkg_from_github(
+    OUT_SOURCE_PATH SOURCE_PATH
+    REPO nghttp2/nghttp2
+    REF v1.50.0
+    SHA512 0bc98be2e61940d78e9542d5391cecc24177a6a55012fb0df10c875d0daf5c6b480d12f00ead85f6d971d20f20af3a55abe4c8593f68c67ef3f016e87675f563
+    HEAD_REF master
 )
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+string(COMPARE EQUAL "${VCPKG_CRT_LINKAGE}" "static" ENABLE_STATIC_CRT)
+string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" ENABLE_STATIC_LIB)
+string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" ENABLE_SHARED_LIB)
+
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
         -DENABLE_LIB_ONLY=ON
         -DENABLE_ASIO_LIB=OFF
+        "-DENABLE_STATIC_CRT=${ENABLE_STATIC_CRT}"
+        "-DENABLE_STATIC_LIB=${ENABLE_STATIC_LIB}"
+        "-DENABLE_SHARED_LIB=${ENABLE_SHARED_LIB}"
+)
+vcpkg_cmake_install()
+vcpkg_copy_pdbs()
+vcpkg_fixup_pkgconfig()
+
+file(REMOVE_RECURSE
+    "${CURRENT_PACKAGES_DIR}/debug/include"
+    "${CURRENT_PACKAGES_DIR}/debug/share"
+    "${CURRENT_PACKAGES_DIR}/share/man"
+    "${CURRENT_PACKAGES_DIR}/share/doc"
 )
 
-vcpkg_install_cmake()
-
-# Remove unwanted files
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/share)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/share/man)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/share/doc)
-
-# Move dll files from /lib to /bin where vcpkg expects them
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
-    file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/bin)
-    file(RENAME ${CURRENT_PACKAGES_DIR}/lib/${LIB_NAME}.dll ${CURRENT_PACKAGES_DIR}/bin/${LIB_NAME}.dll)
-
-    file(MAKE_DIRECTORY ${CURRENT_PACKAGES_DIR}/debug/bin)
-    file(RENAME ${CURRENT_PACKAGES_DIR}/debug/lib/${LIB_NAME}.dll ${CURRENT_PACKAGES_DIR}/debug/bin/${LIB_NAME}.dll)
+if(VCPKG_LIBRARY_LINKAGE STREQUAL static)
+    file(REMOVE_RECURSE
+        "${CURRENT_PACKAGES_DIR}/bin"
+        "${CURRENT_PACKAGES_DIR}/debug/bin"
+    )
+    file(APPEND "${CURRENT_PACKAGES_DIR}/include/nghttp2/nghttp2ver.h" [[
+#ifndef NGHTTP2_STATICLIB
+#  define NGHTTP2_STATICLIB
+#endif
+]])
 endif()
 
-# License and man
-file(INSTALL ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/${LIB_NAME} RENAME copyright)
-
-vcpkg_copy_pdbs()
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

@@ -1,59 +1,60 @@
-include(vcpkg_common_functions)
-
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
-    REPO erikd/libsndfile
-    REF 6830c421899e32f8d413a903a21a9b6cf384d369
-    SHA512 b13c5d7bc27218eff8a8c4ce89a964b4920b1d3946e4843e60be965d77ec205845750a82bf654a7c2c772bf3a24f6ff5706881b24ff12115f2525c8134b6d0b9
+    REPO libsndfile/libsndfile
+    REF 1.1.0
+    SHA512 5e530c33165a2d2be1c22d3a4bd96f0f1817dded3a45d24bad0e3f2c7908ccc1f19327a91d5040c3ea4d591845876019180747a125bf2a6f8bd49a6f67eadacd
     HEAD_REF master
     PATCHES
-        "${CMAKE_CURRENT_LIST_DIR}/uwp-createfile-getfilesize.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/uwp-createfile-getfilesize-addendum.patch"
+        fix-mp3lame.patch
+        fix-uwp.patch
 )
 
-string(COMPARE EQUAL "${VCPKG_CRT_LINKAGE}" "static" CRT_LIB_STATIC)
-string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" BUILD_STATIC)
-
-option(BUILD_EXECUTABLES "Build sndfile tools and install to folder tools" OFF)
-
-if("external-libs" IN_LIST FEATURES)
-    set(SNDFILE_WITHOUT_EXTERNAL_LIBS OFF)
-else()
-    set(SNDFILE_WITHOUT_EXTERNAL_LIBS ON)
+if(VCPKG_LIBRARY_LINKAGE STREQUAL dynamic)
+    vcpkg_find_acquire_program(PYTHON3)
 endif()
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
-    OPTIONS -DBUILD_EXAMPLES=0 -DBUILD_REGTEST=0 -DBUILD_TESTING=0 -DENABLE_STATIC_RUNTIME=${CRT_LIB_STATIC} -DBUILD_STATIC_LIBS=${BUILD_STATIC} -DDISABLE_EXTERNAL_LIBS=${SNDFILE_WITHOUT_EXTERNAL_LIBS}
-    OPTIONS_RELEASE -DBUILD_PROGRAMS=${BUILD_EXECUTABLES}
-    # Setting ENABLE_PACKAGE_CONFIG=0 has no effect
-    OPTIONS_DEBUG -DBUILD_PROGRAMS=0
+vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
+    FEATURES
+        external-libs ENABLE_EXTERNAL_LIBS
+        mpeg ENABLE_MPEG
+        regtest BUILD_REGTEST
 )
 
-vcpkg_install_cmake()
+if(VCPKG_TARGET_IS_UWP)
+    set(VCPKG_C_FLAGS "/sdl- ${VCPKG_C_FLAGS}")
+    set(VCPKG_CXX_FLAGS "/sdl- ${VCPKG_CXX_FLAGS}")
+endif()
 
-vcpkg_fixup_cmake_targets(CONFIG_PATH cmake)
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DBUILD_EXAMPLES=OFF
+        -DBUILD_TESTING=OFF
+        -DENABLE_BOW_DOCS=OFF
+        -DBUILD_PROGRAMS=OFF
+        -DBUILD_REGTEST=OFF
+        -DCMAKE_FIND_PACKAGE_PREFER_CONFIG=ON
+        -DPYTHON_EXECUTABLE=${PYTHON3}
+        ${FEATURE_OPTIONS}
+    MAYBE_UNUSED_VARIABLES
+        PYTHON_EXECUTABLE
+)
 
-# Fix applied for 6830c421899e32f8d413a903a21a9b6cf384d369
-file(READ "${CURRENT_PACKAGES_DIR}/share/libsndfile/LibSndFileTargets.cmake" _contents)
-string(REPLACE "INTERFACE_INCLUDE_DIRECTORIES \"\${_IMPORT_PREFIX}/lib\"" "INTERFACE_INCLUDE_DIRECTORIES \"\${_IMPORT_PREFIX}/include\"" _contents "${_contents}")
-file(WRITE "${CURRENT_PACKAGES_DIR}/share/libsndfile/LibSndFileTargets.cmake" "${_contents}")
+vcpkg_cmake_install()
+
+if(WIN32 AND (NOT MINGW) AND (NOT CYGWIN))
+    set(CONFIG_PATH cmake)
+else()
+    set(CONFIG_PATH lib/cmake/SndFile)
+endif()
+
+vcpkg_cmake_config_fixup(PACKAGE_NAME SndFile CONFIG_PATH "${CONFIG_PATH}")
+vcpkg_fixup_pkgconfig(SYSTEM_LIBRARIES m)
 
 vcpkg_copy_pdbs()
 
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/share)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/doc/libsndfile ${CURRENT_PACKAGES_DIR}/share/${PORT}/doc)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/share/doc)
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/share/doc")
 
-if(BUILD_EXECUTABLES)
-    file(GLOB TOOLS ${CURRENT_PACKAGES_DIR}/bin/*.exe)
-    file(COPY ${TOOLS} DESTINATION ${CURRENT_PACKAGES_DIR}/tools/${PORT})
-    file(REMOVE ${TOOLS})
-    vcpkg_copy_tool_dependencies(${CURRENT_PACKAGES_DIR}/tools/${PORT})
-endif(BUILD_EXECUTABLES)
-
-# Handle copyright
-file(COPY ${SOURCE_PATH}/COPYING DESTINATION ${CURRENT_PACKAGES_DIR}/share/${PORT})
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/${PORT}/COPYING ${CURRENT_PACKAGES_DIR}/share/${PORT}/copyright)
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)

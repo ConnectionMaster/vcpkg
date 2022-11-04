@@ -1,5 +1,3 @@
-include(vcpkg_common_functions)
-set(SOURCE_PATH ${CURRENT_BUILDTREES_DIR}/src/collada-dom-2.5.0)
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO rdiankov/collada-dom
@@ -9,20 +7,22 @@ vcpkg_from_github(
     PATCHES
         vs-version-detection.patch
         use-uriparser.patch
-		use-vcpkg-minizip.patch
+        use-vcpkg-minizip.patch
+        fix-shared-keyword.patch
 )
 
 vcpkg_configure_cmake(
     SOURCE_PATH ${SOURCE_PATH}
+    PREFER_NINJA
 )
 
 vcpkg_install_cmake()
 
-vcpkg_fixup_cmake_targets(CONFIG_PATH "lib/cmake/collada_dom-2.5")
+vcpkg_fixup_cmake_targets(CONFIG_PATH lib/cmake/collada_dom-2.5)
 
 file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
 
 # Handle copyright
-file(INSTALL ${SOURCE_PATH}/licenses/license_e.txt DESTINATION
-             ${CURRENT_PACKAGES_DIR}/share/collada-dom
-             RENAME copyright)
+file(INSTALL ${SOURCE_PATH}/licenses/license_e.txt DESTINATION ${CURRENT_PACKAGES_DIR}/share/${PORT} RENAME copyright)
+
+vcpkg_fixup_pkgconfig()

@@ -1,12 +1,16 @@
-include(vcpkg_common_functions)
-
+# This port needs to be updated at the same time as mongo-c-driver
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
-    REPO mongodb/libbson
-    REF 1.9.5
-    SHA512 14bc75989baac550f42939ea161fa7872b950e5b669dc8f19e897f0783b04e0212e5e722b3fcdf946308b9a68bc066502ed8238dad92e342e5f49b8b2cc8f484
+    REPO mongodb/mongo-c-driver
+    REF 00c59aa4a1f72e49e55b211f28650c66c542739e # 1.17.6
+    SHA512 9191c64def45ff268cb5d2ce08782265fb8e0567237c8d3311b91e996bd938d629578a7b50e8db29c4b3aa5bc96f93361f6d918e9cfd4861e5f5c5554cf4616d
     HEAD_REF master
-    PATCHES fix-uwp.patch
+    PATCHES
+        fix-uwp.patch
+        fix-static-cmake.patch
+        disable-source-write.patch
+        fix-include-directory.patch
+        fix-static-cmake-2.patch
 )
 
 if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
@@ -15,74 +19,58 @@ else()
     set(ENABLE_STATIC OFF)
 endif()
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+file(READ "${CMAKE_CURRENT_LIST_DIR}/vcpkg.json" _contents)
+string(JSON BUILD_VERSION GET "${_contents}" version)
+file(WRITE "${SOURCE_PATH}/VERSION_CURRENT" "${BUILD_VERSION}")
+
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
+        -DENABLE_MONGOC=OFF
+        -DENABLE_BSON=ON
         -DENABLE_TESTS=OFF
+        -DENABLE_EXAMPLES=OFF
         -DENABLE_STATIC=${ENABLE_STATIC}
+        -DBUILD_VERSION=${BUILD_VERSION}
+        -DCMAKE_DISABLE_FIND_PACKAGE_PythonInterp=ON
+    MAYBE_UNUSED_VARIABLES
+        CMAKE_DISABLE_FIND_PACKAGE_PythonInterp
 )
 
-vcpkg_install_cmake()
-if (VCPKG_LIBRARY_LINKAGE STREQUAL static)
-    vcpkg_fixup_cmake_targets(CONFIG_PATH "lib/cmake/libbson-static-1.0")
-else()
-    vcpkg_fixup_cmake_targets(CONFIG_PATH "lib/cmake/libbson-1.0")
-endif()
-
-# This rename is needed because the official examples expect to use #include <bson.h>
-# See Microsoft/vcpkg#904
-file(RENAME
-    ${CURRENT_PACKAGES_DIR}/include/libbson-1.0
-    ${CURRENT_PACKAGES_DIR}/temp)
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/include)
-file(RENAME ${CURRENT_PACKAGES_DIR}/temp ${CURRENT_PACKAGES_DIR}/include)
-
-file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/include)
-
-if (VCPKG_LIBRARY_LINKAGE STREQUAL static)
-    if(VCPKG_CMAKE_SYSTEM_NAME AND NOT VCPKG_CMAKE_SYSTEM_NAME STREQUAL "WindowsStore")
-        file(RENAME
-            ${CURRENT_PACKAGES_DIR}/lib/libbson-static-1.0.a
-            ${CURRENT_PACKAGES_DIR}/lib/libbson-1.0.a)
-        file(RENAME
-            ${CURRENT_PACKAGES_DIR}/debug/lib/libbson-static-1.0.a
-            ${CURRENT_PACKAGES_DIR}/debug/lib/libbson-1.0.a)
-    else()
-        file(RENAME
-            ${CURRENT_PACKAGES_DIR}/lib/bson-static-1.0.lib
-            ${CURRENT_PACKAGES_DIR}/lib/bson-1.0.lib)
-        file(RENAME
-            ${CURRENT_PACKAGES_DIR}/debug/lib/bson-static-1.0.lib
-            ${CURRENT_PACKAGES_DIR}/debug/lib/bson-1.0.lib)
-    endif()
-
-    # drop the __declspec(dllimport) when building static
-    vcpkg_apply_patches(
-        SOURCE_PATH ${CURRENT_PACKAGES_DIR}/include
-        PATCHES static.patch
-    )
-
-    file(REMOVE_RECURSE ${CURRENT_PACKAGES_DIR}/debug/bin ${CURRENT_PACKAGES_DIR}/bin)
-endif()
-
-configure_file(${SOURCE_PATH}/COPYING ${CURRENT_PACKAGES_DIR}/share/libbson/copyright COPYONLY)
-file(COPY ${SOURCE_PATH}/THIRD_PARTY_NOTICES DESTINATION ${CURRENT_PACKAGES_DIR}/share/libbson)
-
-if (VCPKG_LIBRARY_LINKAGE STREQUAL static)
-    set(PORT_POSTFIX "static-1.0")
-else()
-    set(PORT_POSTFIX "1.0")
-endif()
-
-# Create cmake files for _both_ find_package(libbson) and find_package(libbson-static-1.0)/find_package(libbson-1.0)
-file(READ ${CURRENT_PACKAGES_DIR}/share/libbson/libbson-${PORT_POSTFIX}-config.cmake LIBBSON_CONFIG_CMAKE)
-string(REPLACE "/include/libbson-1.0" "/include" LIBBSON_CONFIG_CMAKE "${LIBBSON_CONFIG_CMAKE}")
-string(REPLACE "bson-static-1.0" "bson-1.0" LIBBSON_CONFIG_CMAKE "${LIBBSON_CONFIG_CMAKE}")
-file(WRITE ${CURRENT_PACKAGES_DIR}/share/libbson/libbson-${PORT_POSTFIX}-config.cmake "${LIBBSON_CONFIG_CMAKE}")
-file(COPY ${CURRENT_PACKAGES_DIR}/share/libbson/libbson-${PORT_POSTFIX}-config.cmake DESTINATION ${CURRENT_PACKAGES_DIR}/share/libbson-${PORT_POSTFIX})
-file(COPY ${CURRENT_PACKAGES_DIR}/share/libbson/libbson-${PORT_POSTFIX}-config-version.cmake DESTINATION ${CURRENT_PACKAGES_DIR}/share/libbson-${PORT_POSTFIX})
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/libbson/libbson-${PORT_POSTFIX}-config.cmake ${CURRENT_PACKAGES_DIR}/share/libbson/libbson-config.cmake)
-file(RENAME ${CURRENT_PACKAGES_DIR}/share/libbson/libbson-${PORT_POSTFIX}-config-version.cmake ${CURRENT_PACKAGES_DIR}/share/libbson/libbson-config-version.cmake)
+vcpkg_cmake_install()
 
 vcpkg_copy_pdbs()
+
+
+vcpkg_cmake_config_fixup(PACKAGE_NAME bson-1.0 CONFIG_PATH "lib/cmake/bson-1.0" DO_NOT_DELETE_PARENT_CONFIG_PATH)
+if (VCPKG_LIBRARY_LINKAGE STREQUAL static)
+    vcpkg_cmake_config_fixup(PACKAGE_NAME libbson-1.0 CONFIG_PATH "lib/cmake/libbson-static-1.0")
+else()
+    vcpkg_cmake_config_fixup(PACKAGE_NAME libbson-1.0 CONFIG_PATH "lib/cmake/libbson-1.0")
+endif()
+
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/share")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/share/mongo-c-driver")
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+
+if (VCPKG_LIBRARY_LINKAGE STREQUAL static)
+    # drop the __declspec(dllimport) when building static
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/bson/bson-macros.h"
+        "define BSON_API __declspec(dllimport)" "define BSON_API")
+
+     file(RENAME
+        "${CURRENT_PACKAGES_DIR}/share/libbson-1.0/libbson-static-1.0-config.cmake"
+        "${CURRENT_PACKAGES_DIR}/share/libbson-1.0/libbson-1.0-config.cmake")
+     file(RENAME
+        "${CURRENT_PACKAGES_DIR}/share/libbson-1.0/libbson-static-1.0-config-version.cmake"
+        "${CURRENT_PACKAGES_DIR}/share/libbson-1.0/libbson-1.0-config-version.cmake")
+
+    file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/bin" "${CURRENT_PACKAGES_DIR}/bin")
+endif()
+
+file(COPY "${SOURCE_PATH}/THIRD_PARTY_NOTICES" DESTINATION "${CURRENT_PACKAGES_DIR}/share/libbson")
+
+file(INSTALL "${SOURCE_PATH}/COPYING" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
+file(INSTALL "${CURRENT_PORT_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
+
+vcpkg_fixup_pkgconfig()

@@ -1,26 +1,39 @@
-include(vcpkg_common_functions)
-
 vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO google/breakpad
-    REF 54fa71efbe50fb2b58096d871575b59e12edba6d
-    SHA512 ecd1c6c5cc0e3984d05fe86ec11172e93b0e31c39ce0af9d0de08b8d03083686e2288e0cd787180c599446c277e58f48550ce4ab718019576c64fc403a592745
+    REF v2022.07.12
+    SHA512 872fa74520709d6510b798c7adfb7fed34a84b1831e774087515c23a005b0ea76ef7758bb565f0ff9f2153206cf53958621463fba0e055c9d31dc68f687e2b8f
     HEAD_REF master
+    PATCHES
+        fix-unique_ptr.patch
 )
 
-file(COPY ${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt DESTINATION ${SOURCE_PATH})
+if(VCPKG_HOST_IS_LINUX OR VCPKG_TARGET_IS_LINUX OR VCPKG_TARGET_IS_ANDROID)
+    vcpkg_from_git(
+        OUT_SOURCE_PATH LSS_SOURCE_PATH
+        URL https://chromium.googlesource.com/linux-syscall-support
+        REF 7bde79cc274d06451bf65ae82c012a5d3e476b5a
+    )
+    
+    file(RENAME "${LSS_SOURCE_PATH}" "${SOURCE_PATH}/src/third_party/lss")
+endif()
 
-vcpkg_configure_cmake(
-    SOURCE_PATH ${SOURCE_PATH}
-    PREFER_NINJA
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/CMakeLists.txt" "${CMAKE_CURRENT_LIST_DIR}/check_getcontext.cc" DESTINATION "${SOURCE_PATH}")
+
+vcpkg_cmake_configure(
+    SOURCE_PATH "${SOURCE_PATH}"
+    OPTIONS
+        -DINSTALL_HEADERS=ON
 )
 
-vcpkg_install_cmake()
+vcpkg_cmake_install()
+   file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/debug/include")
+   file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/include/client/linux/data" "${CURRENT_PACKAGES_DIR}/include/client/linux/sender")
 
-vcpkg_fixup_cmake_targets(CONFIG_PATH share/unofficial-breakpad TARGET_PATH share/unofficial-breakpad)
+vcpkg_cmake_config_fixup(PACKAGE_NAME unofficial-breakpad CONFIG_PATH share/unofficial-breakpad)
 
 vcpkg_copy_pdbs()
 
-file(INSTALL ${SOURCE_PATH}/LICENSE DESTINATION ${CURRENT_PACKAGES_DIR}/share/breakpad RENAME copyright)
+file(INSTALL "${SOURCE_PATH}/LICENSE" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}" RENAME copyright)
